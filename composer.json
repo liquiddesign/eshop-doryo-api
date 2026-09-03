@@ -2,7 +2,7 @@
     "name": "liquiddesign/eshop-doryo-api",
     "description": "Čtecí API e-shopu pro Doryo — objednávky, zákazníci, produkty, sklad a faktury v jednotné projekci",
     "type": "library",
-    "license": "proprietary",
+    "license": "MIT",
     "require": {
         "php": ">=8.2",
         "liquiddesign/eshop": "^2.0",
