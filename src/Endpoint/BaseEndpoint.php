@@ -44,8 +44,9 @@ abstract class BaseEndpoint implements Endpoint
 	/**
 	 * Stránka výsledků. Bere se o jeden záznam víc, než klient chtěl — z toho se pozná,
 	 * jestli má smysl posílat další kurzor, a nemusí se počítat COUNT přes celou tabulku.
-	 * @param \StORM\Collection<\StORM\Entity> $collection
-	 * @return array{rows: array<string, \StORM\Entity>, nextCursor: string|null}
+	 * @template T of \StORM\Entity
+	 * @param \StORM\Collection<T> $collection
+	 * @return array{rows: array<string, T>, nextCursor: string|null}
 	 */
 	protected function paginate(Collection $collection, Query $query): array
 	{
@@ -62,7 +63,8 @@ abstract class BaseEndpoint implements Endpoint
 	}
 
 	/**
-	 * @param \StORM\Collection<\StORM\Entity> $collection
+	 * @template T of \StORM\Entity
+	 * @param \StORM\Collection<T> $collection
 	 * @param array<string> $columns
 	 */
 	protected function applyFulltext(Collection $collection, Query $query, array $columns): void

@@ -79,7 +79,8 @@ final class DoryoApiDI extends CompilerExtension
 	public function loadConfiguration(): void
 	{
 		$builder = $this->getContainerBuilder();
-		$config = $this->config;
+		/** @var \stdClass $config */
+		$config = $this->getConfig();
 
 		$builder->addDefinition($this->prefix('config'))
 			->setFactory(Config::class, [
@@ -153,8 +154,9 @@ final class DoryoApiDI extends CompilerExtension
 
 		// presenter žije v balíku, ne v App\ — mapování se přidává, ne přepisuje
 		if ($builder->hasDefinition('application.presenterFactory')) {
-			$builder->getDefinition('application.presenterFactory')
-				->addSetup('setMapping', [[self::PRESENTER_MODULE => 'DoryoApi\*Presenter']]);
+			/** @var \Nette\DI\Definitions\ServiceDefinition $presenterFactory */
+			$presenterFactory = $builder->getDefinition('application.presenterFactory');
+			$presenterFactory->addSetup('setMapping', [[self::PRESENTER_MODULE => 'DoryoApi\*Presenter']]);
 		}
 
 		$routerName = $builder->hasDefinition('routing.router') ? 'routing.router' : $builder->getByType(RouteList::class);
@@ -164,6 +166,8 @@ final class DoryoApiDI extends CompilerExtension
 		}
 
 		// prepend, ne add: stránkový router shopu by jinak dostal cestu dřív
-		$builder->getDefinition($routerName)->addSetup('prepend', ['@' . $this->prefix('routes')]);
+		/** @var \Nette\DI\Definitions\ServiceDefinition $router */
+		$router = $builder->getDefinition($routerName);
+		$router->addSetup('prepend', ['@' . $this->prefix('routes')]);
 	}
 }
