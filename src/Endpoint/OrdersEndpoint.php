@@ -368,13 +368,17 @@ final class OrdersEndpoint extends BaseEndpoint
 	 */
 	private function loadInvoiceIds(array $orderIds): array
 	{
-		$rows = $this->connection->rows(['nxn' => 'eshop_invoice_nxn_eshop_order'], ['order' => 'nxn.fk_order', 'invoice' => 'nxn.fk_invoice'])
+		// `order` je v MariaDB rezervované slovo, jako alias by shodilo celý dotaz
+		$rows = $this->connection->rows(['nxn' => 'eshop_invoice_nxn_eshop_order'], [
+			'orderId' => 'nxn.fk_order',
+			'invoiceId' => 'nxn.fk_invoice',
+		])
 			->where('nxn.fk_order', $orderIds);
 
 		$map = [];
 
 		foreach ($rows as $row) {
-			$map[$row->order][] = $row->invoice;
+			$map[$row->orderId][] = $row->invoiceId;
 		}
 
 		return $map;
