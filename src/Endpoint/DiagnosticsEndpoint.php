@@ -298,14 +298,6 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 	}
 
 	/**
-	 * @return array<string, mixed>
-	 */
-	private static function finding(string $code, string $severity, string $detail): array
-	{
-		return ['code' => $code, 'severity' => $severity, 'detail' => $detail];
-	}
-
-	/**
 	 * @return array<array<string, mixed>>
 	 */
 	private function loadVisibility(string $productId, string $suffix): array
@@ -499,5 +491,13 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 			// shop upomínky nemusí vůbec evidovat
 			return [];
 		}
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function finding(string $code, string $severity, string $detail): array
+	{
+		return ['code' => $code, 'severity' => $severity, 'detail' => $detail];
 	}
 }

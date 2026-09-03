@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace DoryoApi;
 
-use DoryoApi\Endpoint\Endpoint;
 use DoryoApi\Http\ApiException;
 use Nette\Utils\Strings;
 
@@ -18,7 +17,7 @@ final class Router
 	private array $routes = [];
 
 	/**
-	 * @param array<Endpoint> $endpoints
+	 * @param array<\DoryoApi\Endpoint\Endpoint> $endpoints
 	 */
 	public function __construct(array $endpoints)
 	{

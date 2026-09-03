@@ -184,6 +184,47 @@ final class ProductsEndpoint extends BaseEndpoint
 	}
 
 	/**
+	 * Hodnocení produktu od zákazníků.
+	 * @param array<string, string> $params
+	 */
+	public function reviews(array $params, Query $query): Response
+	{
+		/** @var \Eshop\DB\Product $product */
+		$product = $this->one(Product::class, $params['id'], 'Produkt');
+
+		$collection = $this->connection->rows(['r' => 'eshop_review'], [
+			'id' => 'r.uuid',
+			'score' => 'r.score',
+			'text' => 'r.text',
+			'author' => 'r.customerFullName',
+			'customerId' => 'r.fk_customer',
+			'createdTs' => 'r.createdTs',
+			'reviewedTs' => 'r.reviewedTs',
+			'recommends' => 'r.recommends',
+		])
+			->where('r.fk_product', $product->getPK())
+			->where('r.score IS NOT NULL')
+			->orderBy(['r.createdTs' => 'DESC'])
+			->setTake($query->limit());
+
+		$items = [];
+
+		foreach ($collection as $row) {
+			$items[] = [
+				'id' => $row->id,
+				'score' => $row->score !== null ? (float) $row->score : null,
+				'text' => $row->text ?: null,
+				'author' => $row->author ?: null,
+				'customerId' => $row->customerId,
+				'recommends' => $row->recommends === null ? null : (bool) $row->recommends,
+				'createdAt' => Dates::dateTime($row->createdTs, $this->config->getTimezone()),
+			];
+		}
+
+		return Response::list($items, null);
+	}
+
+	/**
 	 * @param \StORM\Collection<\Eshop\DB\Product> $collection
 	 */
 	private function filterByCategory(Collection $collection, string $category, string $suffix): void
@@ -423,47 +464,6 @@ final class ProductsEndpoint extends BaseEndpoint
 		} catch (\Throwable) {
 			return [];
 		}
-	}
-
-	/**
-	 * Hodnocení produktu od zákazníků.
-	 * @param array<string, string> $params
-	 */
-	public function reviews(array $params, Query $query): Response
-	{
-		/** @var \Eshop\DB\Product $product */
-		$product = $this->one(Product::class, $params['id'], 'Produkt');
-
-		$collection = $this->connection->rows(['r' => 'eshop_review'], [
-			'id' => 'r.uuid',
-			'score' => 'r.score',
-			'text' => 'r.text',
-			'author' => 'r.customerFullName',
-			'customerId' => 'r.fk_customer',
-			'createdTs' => 'r.createdTs',
-			'reviewedTs' => 'r.reviewedTs',
-			'recommends' => 'r.recommends',
-		])
-			->where('r.fk_product', $product->getPK())
-			->where('r.score IS NOT NULL')
-			->orderBy(['r.createdTs' => 'DESC'])
-			->setTake($query->limit());
-
-		$items = [];
-
-		foreach ($collection as $row) {
-			$items[] = [
-				'id' => $row->id,
-				'score' => $row->score !== null ? (float) $row->score : null,
-				'text' => $row->text ?: null,
-				'author' => $row->author ?: null,
-				'customerId' => $row->customerId,
-				'recommends' => $row->recommends === null ? null : (bool) $row->recommends,
-				'createdAt' => Dates::dateTime($row->createdTs, $this->config->getTimezone()),
-			];
-		}
-
-		return Response::list($items, null);
 	}
 
 	/**

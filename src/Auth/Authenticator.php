@@ -91,7 +91,9 @@ final class Authenticator
 			return true;
 		}
 
-		$mask = \chr(0xFF << (8 - $remainder) & 0xFF);
+		// maska pro poslední, nekompletní bajt prefixu
+		$shift = 8 - $remainder;
+		$mask = \chr(0xFF << $shift & 0xFF);
 
 		$ipByte = $ipBinary[$bytes] ?? "\0";
 		$subnetByte = $subnetBinary[$bytes] ?? "\0";

@@ -16,28 +16,6 @@ use Nette\Utils\Arrays;
  */
 final class OrderMapper extends Mapper
 {
-	/**
-	 * Stav objednávky odvozený ze značek času. Záměrně nevoláme
-	 * Eshop\DB\OrderRepository::getState(), protože ta sahá na přihlášeného zákazníka
-	 * (session) — API žádnou nemá.
-	 */
-	public static function shopState(Order $order): string
-	{
-		if ($order->canceledTs) {
-			return Order::STATE_CANCELED;
-		}
-
-		if ($order->receivedTs && $order->completedTs) {
-			return Order::STATE_COMPLETED;
-		}
-
-		if ($order->receivedTs) {
-			return Order::STATE_RECEIVED;
-		}
-
-		return Order::STATE_OPEN;
-	}
-
 	public function status(Order $order): ?string
 	{
 		$shopState = self::shopState($order);
@@ -112,6 +90,28 @@ final class OrderMapper extends Mapper
 		$this->extend('extendOrder', $order, $out);
 
 		return $out;
+	}
+
+	/**
+	 * Stav objednávky odvozený ze značek času. Záměrně nevoláme
+	 * Eshop\DB\OrderRepository::getState(), protože ta sahá na přihlášeného zákazníka
+	 * (session) — API žádnou nemá.
+	 */
+	public static function shopState(Order $order): string
+	{
+		if ($order->canceledTs) {
+			return Order::STATE_CANCELED;
+		}
+
+		if ($order->receivedTs && $order->completedTs) {
+			return Order::STATE_COMPLETED;
+		}
+
+		if ($order->receivedTs) {
+			return Order::STATE_RECEIVED;
+		}
+
+		return Order::STATE_OPEN;
 	}
 
 	/**

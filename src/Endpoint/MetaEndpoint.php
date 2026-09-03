@@ -162,53 +162,6 @@ final class MetaEndpoint extends BaseEndpoint
 	}
 
 	/**
-	 * Hodnota sloupce, který v téhle verzi eshopu být nemusí.
-	 */
-	private static function stringValue(\StORM\Entity $entity, string $property): ?string
-	{
-		try {
-			$value = $entity->getValue($property);
-		} catch (\Throwable) {
-			return null;
-		}
-
-		return \is_string($value) && $value !== '' ? $value : null;
-	}
-
-	/**
-	 * @param array<string, string> $select
-	 * @param callable(\StORM\Collection<\StORM\Entity>): \StORM\Collection<\StORM\Entity>|null $prepare
-	 * @return array<array<string, mixed>>
-	 */
-	private function rows(string $table, array $select, ?callable $prepare = null): array
-	{
-		$collection = $this->connection->rows(['this' => $table], $select);
-
-		if ($prepare !== null) {
-			$collection = $prepare($collection);
-		}
-
-		$items = [];
-
-		foreach ($collection->setTake(500) as $row) {
-			$items[] = (array) $row;
-		}
-
-		return $items;
-	}
-
-	private function count(string $table, ?string $where = null): int
-	{
-		$collection = $this->connection->rows(['this' => $table], ['cnt' => 'COUNT(*)']);
-
-		if ($where !== null) {
-			$collection->where($where);
-		}
-
-		return (int) $collection->firstValue('cnt');
-	}
-
-	/**
 	 * Co tenhle shop reálně používá.
 	 *
 	 * Ne každý shop vede balíky, recenze, importy od dodavatelů nebo úhrady faktur — a model
@@ -306,6 +259,39 @@ final class MetaEndpoint extends BaseEndpoint
 	}
 
 	/**
+	 * @param array<string, string> $select
+	 * @param callable(\StORM\Collection<\StORM\Entity>): \StORM\Collection<\StORM\Entity>|null $prepare
+	 * @return array<array<string, mixed>>
+	 */
+	private function rows(string $table, array $select, ?callable $prepare = null): array
+	{
+		$collection = $this->connection->rows(['this' => $table], $select);
+
+		if ($prepare !== null) {
+			$collection = $prepare($collection);
+		}
+
+		$items = [];
+
+		foreach ($collection->setTake(500) as $row) {
+			$items[] = (array) $row;
+		}
+
+		return $items;
+	}
+
+	private function count(string $table, ?string $where = null): int
+	{
+		$collection = $this->connection->rows(['this' => $table], ['cnt' => 'COUNT(*)']);
+
+		if ($where !== null) {
+			$collection->where($where);
+		}
+
+		return (int) $collection->firstValue('cnt');
+	}
+
+	/**
 	 * Odhad počtu řádků tabulek ze statistik databáze — bez skenování dat.
 	 * @return array<string, int>
 	 */
@@ -386,5 +372,19 @@ final class MetaEndpoint extends BaseEndpoint
 		} catch (\Throwable) {
 			return null;
 		}
+	}
+
+	/**
+	 * Hodnota sloupce, který v téhle verzi eshopu být nemusí.
+	 */
+	private static function stringValue(\StORM\Entity $entity, string $property): ?string
+	{
+		try {
+			$value = $entity->getValue($property);
+		} catch (\Throwable) {
+			return null;
+		}
+
+		return \is_string($value) && $value !== '' ? $value : null;
 	}
 }

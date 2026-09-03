@@ -115,253 +115,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	}
 
 	/**
-	 * Nákupy objednávek v okně. Reporty nad položkami košíku se počítají ve dvou krocích:
-	 * nejdřív objednávky (pár tisíc řádků), pak položky jejich košíků. Jedním spojeným
-	 * dotazem to nejde — eshop nemá index na `eshop_order.createdTs`, takže si databáze
-	 * vybere jako výchozí tabulku tříapůlmilionový `eshop_cartitem` a report běží minuty.
-	 * @return array<string>
-	 */
-	private function purchasesInWindow(string $from, string $to): array
-	{
-		$rows = $this->connection->rows(['o' => 'eshop_order'], ['purchase' => 'o.fk_purchase'])
-			->where('o.createdTs >= :apiFrom AND o.createdTs <= :apiTo', ['apiFrom' => $from . ' 00:00:00', 'apiTo' => $to . ' 23:59:59'])
-			->where('o.canceledTs IS NULL')
-			->where('o.fk_purchase IS NOT NULL');
-
-		$ids = [];
-
-		foreach ($rows as $row) {
-			$ids[$row->purchase] = $row->purchase;
-		}
-
-		return \array_values($ids);
-	}
-
-	/**
-	 * @return array<array<string, mixed>>
-	 */
-	private function salesByPeriod(string $groupBy, string $from, string $to): array
-	{
-		$key = match ($groupBy) {
-			'month' => "DATE_FORMAT(o.createdTs, '%Y-%m')",
-			'week' => "DATE_FORMAT(o.createdTs, '%x-W%v')",
-			'day' => 'DATE(o.createdTs)',
-			'customer' => "IFNULL(IFNULL(cu.company, cu.fullname), 'bez zákazníka')",
-			default => "IFNULL(m.fullname, 'bez obchodníka')",
-		};
-
-		$currency = $this->config->getCurrency();
-
-		$rows = $this->connection->rows(['o' => 'eshop_order'], [
-			'reportKey' => $key,
-			'orders' => 'COUNT(o.uuid)',
-			'revenue' => 'SUM(' . OrderTotals::withVat('o', 'p') . ')',
-			'revenueWithoutVat' => 'SUM(' . OrderTotals::withoutVat('o', 'p') . ')',
-		])
-			->join(['p' => 'eshop_purchase'], 'p.uuid = o.fk_purchase', [], 'INNER')
-			->where('o.createdTs >= :apiFrom AND o.createdTs <= :apiTo', ['apiFrom' => $from . ' 00:00:00', 'apiTo' => $to . ' 23:59:59'])
-			->where('o.canceledTs IS NULL')
-			->setGroupBy(['reportKey'])
-			->orderBy(['reportKey' => 'ASC']);
-
-		if ($groupBy === 'merchant') {
-			$rows->join(['m' => 'eshop_merchant'], 'm.uuid = p.fk_merchant');
-		}
-
-		if ($groupBy === 'customer') {
-			$rows->join(['cu' => 'eshop_customer'], 'cu.uuid = p.fk_customer');
-		}
-
-		$items = [];
-
-		foreach ($rows as $row) {
-			$items[] = [
-				'key' => (string) $row->reportKey,
-				'orders' => (int) $row->orders,
-				'revenue' => Money::format($row->revenue, $currency),
-				'revenueWithoutVat' => Money::format($row->revenueWithoutVat, $currency),
-			];
-		}
-
-		return $items;
-	}
-
-	/**
-	 * Tržby po kategoriích nebo výrobcích. Počítají se z položek košíku, ne z celkových cen
-	 * objednávek — dopravu a platbu do kategorie zařadit nejde. Produkt se počítá do jedné
-	 * kategorie (té s nejnižším UUID), aby se stejná položka nesečetla vícekrát; `orders` je
-	 * počet různých objednávek, ve kterých se kategorie objevila.
-	 * @return array<array<string, mixed>>
-	 */
-	private function salesByItems(string $from, string $to, string $dimension): array
-	{
-		$currency = $this->config->getCurrency();
-		$rows = $this->loadItemSales($from, $to);
-
-		if (!$rows) {
-			return [];
-		}
-
-		$productIds = [];
-
-		foreach ($rows as $row) {
-			$productIds[$row->productId] = $row->productId;
-		}
-
-		$labels = $dimension === 'category'
-			? $this->loadPrimaryCategories(\array_values($productIds))
-			: $this->loadProducers(\array_values($productIds));
-
-		$fallback = $dimension === 'category' ? 'bez kategorie' : 'bez výrobce';
-		$totals = [];
-
-		foreach ($rows as $row) {
-			$key = $labels[$row->productId] ?? $fallback;
-
-			$totals[$key]['orders'][$row->purchase] = true;
-			$totals[$key]['revenue'] = ($totals[$key]['revenue'] ?? 0.0) + (float) $row->revenue;
-			$totals[$key]['revenueWithoutVat'] = ($totals[$key]['revenueWithoutVat'] ?? 0.0) + (float) $row->revenueWithoutVat;
-		}
-
-		\uasort($totals, static fn (array $a, array $b): int => $b['revenue'] <=> $a['revenue']);
-
-		$items = [];
-
-		foreach ($totals as $key => $total) {
-			$items[] = [
-				'key' => (string) $key,
-				'orders' => \count($total['orders']),
-				'revenue' => Money::format($total['revenue'], $currency),
-				'revenueWithoutVat' => Money::format($total['revenueWithoutVat'], $currency),
-			];
-		}
-
-		return $items;
-	}
-
-	/**
-	 * Prodeje po položkách za okno — společný základ reportů, které jdou pod úroveň objednávky.
-	 * @return array<object>
-	 */
-	private function loadItemSales(string $from, string $to): array
-	{
-		$purchaseIds = $this->purchasesInWindow($from, $to);
-
-		if (!$purchaseIds) {
-			return [];
-		}
-
-		$rows = $this->connection->rows(['c' => 'eshop_cart'], [
-			'purchase' => 'c.fk_purchase',
-			'productId' => 'ci.fk_product',
-			'quantity' => 'SUM(ci.amount)',
-			'revenue' => 'SUM(ci.priceVat * ci.amount)',
-			'revenueWithoutVat' => 'SUM(ci.price * ci.amount)',
-		])
-			->join(['ci' => 'eshop_cartitem'], 'ci.fk_cart = c.uuid', [], 'INNER')
-			->where('c.fk_purchase', $purchaseIds)
-			->where('ci.fk_product IS NOT NULL')
-			->setGroupBy(['c.fk_purchase', 'ci.fk_product']);
-
-		$items = [];
-
-		foreach ($rows as $row) {
-			$items[] = $row;
-		}
-
-		return $items;
-	}
-
-	/**
-	 * Hlavní kategorie produktů — jedna na produkt, ať se položka nezapočítá vícekrát.
-	 * @param array<string> $productIds
-	 * @return array<string, string> id produktu => název kategorie
-	 */
-	private function loadPrimaryCategories(array $productIds): array
-	{
-		if (!$productIds) {
-			return [];
-		}
-
-		$suffix = $this->connection->getMutationSuffix();
-
-		$rows = $this->connection->rows(['nxn' => 'eshop_product_nxn_eshop_category'], [
-			'product' => 'nxn.fk_product',
-			'category' => 'MIN(nxn.fk_category)',
-		])
-			->where('nxn.fk_product', $productIds)
-			->setGroupBy(['nxn.fk_product']);
-
-		$byProduct = [];
-		$categoryIds = [];
-
-		foreach ($rows as $row) {
-			$byProduct[$row->product] = $row->category;
-			$categoryIds[$row->category] = $row->category;
-		}
-
-		if (!$categoryIds) {
-			return [];
-		}
-
-		$names = $this->connection->rows(['c' => 'eshop_category'], [
-			'id' => 'c.uuid',
-			'name' => "IFNULL(c.fullName$suffix, c.name$suffix)",
-		])
-			->where('c.uuid', \array_values($categoryIds));
-
-		$byCategory = [];
-
-		foreach ($names as $row) {
-			$byCategory[$row->id] = (string) $row->name;
-		}
-
-		$map = [];
-
-		foreach ($byProduct as $product => $category) {
-			if (!isset($byCategory[$category])) {
-				continue;
-			}
-
-			$map[$product] = $byCategory[$category];
-		}
-
-		return $map;
-	}
-
-	/**
-	 * @param array<string> $productIds
-	 * @return array<string, string> id produktu => výrobce
-	 */
-	private function loadProducers(array $productIds): array
-	{
-		if (!$productIds) {
-			return [];
-		}
-
-		$suffix = $this->connection->getMutationSuffix();
-
-		$rows = $this->connection->rows(['p' => 'eshop_product'], [
-			'product' => 'p.uuid',
-			'name' => "pr.name$suffix",
-		])
-			->join(['pr' => 'eshop_producer'], 'pr.uuid = p.fk_producer', [], 'INNER')
-			->where('p.uuid', $productIds);
-
-		$map = [];
-
-		foreach ($rows as $row) {
-			if ($row->name === null) {
-				continue;
-			}
-
-			$map[$row->product] = (string) $row->name;
-		}
-
-		return $map;
-	}
-
-	/**
 	 * Kdo roste a kdo padá. Obrat a počet objednávek za období proti srovnávacímu období;
 	 * když srovnávací období klient neurčí, bere se stejně dlouhé bezprostředně předchozí.
 	 * @param array<string, string> $params
@@ -592,106 +345,6 @@ final class ReportsEndpoint extends BaseEndpoint
 		\usort($items, static fn (array $a, array $b): int => ($a['coverageDays'] ?? \PHP_INT_MAX) <=> ($b['coverageDays'] ?? \PHP_INT_MAX));
 
 		return Response::list(\array_slice($items, 0, $query->limit()), null);
-	}
-
-	/**
-	 * @return array{0: string, 1: string}
-	 */
-	private function comparisonWindow(Query $query, string $from, string $to): array
-	{
-		$compareFrom = $query->date('compareFrom');
-		$compareTo = $query->date('compareTo');
-
-		if ($compareFrom !== null && $compareTo !== null) {
-			return [$compareFrom, $compareTo];
-		}
-
-		$start = new \DateTimeImmutable($from);
-		$end = new \DateTimeImmutable($to);
-		$length = (int) $start->diff($end)->format('%a') + 1;
-
-		return [
-			$start->modify("-$length days")->format('Y-m-d'),
-			$start->modify('-1 day')->format('Y-m-d'),
-		];
-	}
-
-	/**
-	 * @return array<string, object>
-	 */
-	private function loadCustomerTotals(string $from, string $to): array
-	{
-		$rows = $this->connection->rows(['o' => 'eshop_order'], [
-			'customerId' => 'p.fk_customer',
-			'orders' => 'COUNT(o.uuid)',
-			'revenue' => 'SUM(' . OrderTotals::withVat('o', 'p') . ')',
-			'lastOrderOn' => 'MAX(o.createdTs)',
-		])
-			->join(['p' => 'eshop_purchase'], 'p.uuid = o.fk_purchase', [], 'INNER')
-			->where('o.createdTs >= :apiFrom AND o.createdTs <= :apiTo', ['apiFrom' => $from . ' 00:00:00', 'apiTo' => $to . ' 23:59:59'])
-			->where('o.canceledTs IS NULL')
-			->where('p.fk_customer IS NOT NULL')
-			->setGroupBy(['p.fk_customer']);
-
-		$map = [];
-
-		foreach ($rows as $row) {
-			$map[$row->customerId] = $row;
-		}
-
-		return $map;
-	}
-
-	/**
-	 * @param array<string> $ids
-	 * @return array<string, string>
-	 */
-	private function loadCustomerNames(array $ids): array
-	{
-		if (!$ids) {
-			return [];
-		}
-
-		$rows = $this->connection->rows(['c' => 'eshop_customer'], [
-			'id' => 'c.uuid',
-			'name' => 'IFNULL(c.company, c.fullname)',
-		])->where('c.uuid', $ids);
-
-		$map = [];
-
-		foreach ($rows as $row) {
-			$map[$row->id] = (string) $row->name;
-		}
-
-		return $map;
-	}
-
-	/**
-	 * Skladová dostupnost, volitelně jen v jednom skladu.
-	 * @param array<string> $productIds
-	 * @return array<string, int>
-	 */
-	private function loadStock(array $productIds, ?string $store): array
-	{
-		$rows = $this->connection->rows(['a' => 'eshop_amount'], [
-			'id' => 'a.fk_product',
-			'available' => 'SUM(a.inStock)',
-		])
-			->where('a.fk_product', $productIds)
-			->setGroupBy(['a.fk_product']);
-
-		if ($store !== null) {
-			$rows->join(['s' => 'eshop_store'], 's.uuid = a.fk_store', [], 'INNER')
-				->where('s.code = :apiStore OR s.uuid = :apiStore', ['apiStore' => $store]);
-		}
-
-		$map = [];
-
-		foreach ($rows as $row) {
-			$map[$row->id] = (int) $row->available;
-		}
-
-		return $map;
 	}
 
 	/**
@@ -1073,6 +726,353 @@ final class ReportsEndpoint extends BaseEndpoint
 		$response['topProducts'] = $top;
 
 		return new Response($response);
+	}
+
+	/**
+	 * Nákupy objednávek v okně. Reporty nad položkami košíku se počítají ve dvou krocích:
+	 * nejdřív objednávky (pár tisíc řádků), pak položky jejich košíků. Jedním spojeným
+	 * dotazem to nejde — eshop nemá index na `eshop_order.createdTs`, takže si databáze
+	 * vybere jako výchozí tabulku tříapůlmilionový `eshop_cartitem` a report běží minuty.
+	 * @return array<string>
+	 */
+	private function purchasesInWindow(string $from, string $to): array
+	{
+		$rows = $this->connection->rows(['o' => 'eshop_order'], ['purchase' => 'o.fk_purchase'])
+			->where('o.createdTs >= :apiFrom AND o.createdTs <= :apiTo', ['apiFrom' => $from . ' 00:00:00', 'apiTo' => $to . ' 23:59:59'])
+			->where('o.canceledTs IS NULL')
+			->where('o.fk_purchase IS NOT NULL');
+
+		$ids = [];
+
+		foreach ($rows as $row) {
+			$ids[$row->purchase] = $row->purchase;
+		}
+
+		return \array_values($ids);
+	}
+
+	/**
+	 * @return array<array<string, mixed>>
+	 */
+	private function salesByPeriod(string $groupBy, string $from, string $to): array
+	{
+		$key = match ($groupBy) {
+			'month' => "DATE_FORMAT(o.createdTs, '%Y-%m')",
+			'week' => "DATE_FORMAT(o.createdTs, '%x-W%v')",
+			'day' => 'DATE(o.createdTs)',
+			'customer' => "IFNULL(IFNULL(cu.company, cu.fullname), 'bez zákazníka')",
+			default => "IFNULL(m.fullname, 'bez obchodníka')",
+		};
+
+		$currency = $this->config->getCurrency();
+
+		$rows = $this->connection->rows(['o' => 'eshop_order'], [
+			'reportKey' => $key,
+			'orders' => 'COUNT(o.uuid)',
+			'revenue' => 'SUM(' . OrderTotals::withVat('o', 'p') . ')',
+			'revenueWithoutVat' => 'SUM(' . OrderTotals::withoutVat('o', 'p') . ')',
+		])
+			->join(['p' => 'eshop_purchase'], 'p.uuid = o.fk_purchase', [], 'INNER')
+			->where('o.createdTs >= :apiFrom AND o.createdTs <= :apiTo', ['apiFrom' => $from . ' 00:00:00', 'apiTo' => $to . ' 23:59:59'])
+			->where('o.canceledTs IS NULL')
+			->setGroupBy(['reportKey'])
+			->orderBy(['reportKey' => 'ASC']);
+
+		if ($groupBy === 'merchant') {
+			$rows->join(['m' => 'eshop_merchant'], 'm.uuid = p.fk_merchant');
+		}
+
+		if ($groupBy === 'customer') {
+			$rows->join(['cu' => 'eshop_customer'], 'cu.uuid = p.fk_customer');
+		}
+
+		$items = [];
+
+		foreach ($rows as $row) {
+			$items[] = [
+				'key' => (string) $row->reportKey,
+				'orders' => (int) $row->orders,
+				'revenue' => Money::format($row->revenue, $currency),
+				'revenueWithoutVat' => Money::format($row->revenueWithoutVat, $currency),
+			];
+		}
+
+		return $items;
+	}
+
+	/**
+	 * Tržby po kategoriích nebo výrobcích. Počítají se z položek košíku, ne z celkových cen
+	 * objednávek — dopravu a platbu do kategorie zařadit nejde. Produkt se počítá do jedné
+	 * kategorie (té s nejnižším UUID), aby se stejná položka nesečetla vícekrát; `orders` je
+	 * počet různých objednávek, ve kterých se kategorie objevila.
+	 * @return array<array<string, mixed>>
+	 */
+	private function salesByItems(string $from, string $to, string $dimension): array
+	{
+		$currency = $this->config->getCurrency();
+		$rows = $this->loadItemSales($from, $to);
+
+		if (!$rows) {
+			return [];
+		}
+
+		$productIds = [];
+
+		foreach ($rows as $row) {
+			$productIds[$row->productId] = $row->productId;
+		}
+
+		$labels = $dimension === 'category'
+			? $this->loadPrimaryCategories(\array_values($productIds))
+			: $this->loadProducers(\array_values($productIds));
+
+		$fallback = $dimension === 'category' ? 'bez kategorie' : 'bez výrobce';
+		$totals = [];
+
+		foreach ($rows as $row) {
+			$key = $labels[$row->productId] ?? $fallback;
+
+			$totals[$key]['orders'][$row->purchase] = true;
+			$totals[$key]['revenue'] = ($totals[$key]['revenue'] ?? 0.0) + (float) $row->revenue;
+			$totals[$key]['revenueWithoutVat'] = ($totals[$key]['revenueWithoutVat'] ?? 0.0) + (float) $row->revenueWithoutVat;
+		}
+
+		\uasort($totals, static fn (array $a, array $b): int => $b['revenue'] <=> $a['revenue']);
+
+		$items = [];
+
+		foreach ($totals as $key => $total) {
+			$items[] = [
+				'key' => (string) $key,
+				'orders' => \count($total['orders']),
+				'revenue' => Money::format($total['revenue'], $currency),
+				'revenueWithoutVat' => Money::format($total['revenueWithoutVat'], $currency),
+			];
+		}
+
+		return $items;
+	}
+
+	/**
+	 * Prodeje po položkách za okno — společný základ reportů, které jdou pod úroveň objednávky.
+	 * @return array<object>
+	 */
+	private function loadItemSales(string $from, string $to): array
+	{
+		$purchaseIds = $this->purchasesInWindow($from, $to);
+
+		if (!$purchaseIds) {
+			return [];
+		}
+
+		$rows = $this->connection->rows(['c' => 'eshop_cart'], [
+			'purchase' => 'c.fk_purchase',
+			'productId' => 'ci.fk_product',
+			'quantity' => 'SUM(ci.amount)',
+			'revenue' => 'SUM(ci.priceVat * ci.amount)',
+			'revenueWithoutVat' => 'SUM(ci.price * ci.amount)',
+		])
+			->join(['ci' => 'eshop_cartitem'], 'ci.fk_cart = c.uuid', [], 'INNER')
+			->where('c.fk_purchase', $purchaseIds)
+			->where('ci.fk_product IS NOT NULL')
+			->setGroupBy(['c.fk_purchase', 'ci.fk_product']);
+
+		$items = [];
+
+		foreach ($rows as $row) {
+			$items[] = $row;
+		}
+
+		return $items;
+	}
+
+	/**
+	 * Hlavní kategorie produktů — jedna na produkt, ať se položka nezapočítá vícekrát.
+	 * @param array<string> $productIds
+	 * @return array<string, string> id produktu => název kategorie
+	 */
+	private function loadPrimaryCategories(array $productIds): array
+	{
+		if (!$productIds) {
+			return [];
+		}
+
+		$suffix = $this->connection->getMutationSuffix();
+
+		$rows = $this->connection->rows(['nxn' => 'eshop_product_nxn_eshop_category'], [
+			'product' => 'nxn.fk_product',
+			'category' => 'MIN(nxn.fk_category)',
+		])
+			->where('nxn.fk_product', $productIds)
+			->setGroupBy(['nxn.fk_product']);
+
+		$byProduct = [];
+		$categoryIds = [];
+
+		foreach ($rows as $row) {
+			$byProduct[$row->product] = $row->category;
+			$categoryIds[$row->category] = $row->category;
+		}
+
+		if (!$categoryIds) {
+			return [];
+		}
+
+		$names = $this->connection->rows(['c' => 'eshop_category'], [
+			'id' => 'c.uuid',
+			'name' => "IFNULL(c.fullName$suffix, c.name$suffix)",
+		])
+			->where('c.uuid', \array_values($categoryIds));
+
+		$byCategory = [];
+
+		foreach ($names as $row) {
+			$byCategory[$row->id] = (string) $row->name;
+		}
+
+		$map = [];
+
+		foreach ($byProduct as $product => $category) {
+			if (!isset($byCategory[$category])) {
+				continue;
+			}
+
+			$map[$product] = $byCategory[$category];
+		}
+
+		return $map;
+	}
+
+	/**
+	 * @param array<string> $productIds
+	 * @return array<string, string> id produktu => výrobce
+	 */
+	private function loadProducers(array $productIds): array
+	{
+		if (!$productIds) {
+			return [];
+		}
+
+		$suffix = $this->connection->getMutationSuffix();
+
+		$rows = $this->connection->rows(['p' => 'eshop_product'], [
+			'product' => 'p.uuid',
+			'name' => "pr.name$suffix",
+		])
+			->join(['pr' => 'eshop_producer'], 'pr.uuid = p.fk_producer', [], 'INNER')
+			->where('p.uuid', $productIds);
+
+		$map = [];
+
+		foreach ($rows as $row) {
+			if ($row->name === null) {
+				continue;
+			}
+
+			$map[$row->product] = (string) $row->name;
+		}
+
+		return $map;
+	}
+
+	/**
+	 * @return array{0: string, 1: string}
+	 */
+	private function comparisonWindow(Query $query, string $from, string $to): array
+	{
+		$compareFrom = $query->date('compareFrom');
+		$compareTo = $query->date('compareTo');
+
+		if ($compareFrom !== null && $compareTo !== null) {
+			return [$compareFrom, $compareTo];
+		}
+
+		$start = new \DateTimeImmutable($from);
+		$end = new \DateTimeImmutable($to);
+		$length = (int) $start->diff($end)->format('%a') + 1;
+
+		return [
+			$start->modify("-$length days")->format('Y-m-d'),
+			$start->modify('-1 day')->format('Y-m-d'),
+		];
+	}
+
+	/**
+	 * @return array<string, object>
+	 */
+	private function loadCustomerTotals(string $from, string $to): array
+	{
+		$rows = $this->connection->rows(['o' => 'eshop_order'], [
+			'customerId' => 'p.fk_customer',
+			'orders' => 'COUNT(o.uuid)',
+			'revenue' => 'SUM(' . OrderTotals::withVat('o', 'p') . ')',
+			'lastOrderOn' => 'MAX(o.createdTs)',
+		])
+			->join(['p' => 'eshop_purchase'], 'p.uuid = o.fk_purchase', [], 'INNER')
+			->where('o.createdTs >= :apiFrom AND o.createdTs <= :apiTo', ['apiFrom' => $from . ' 00:00:00', 'apiTo' => $to . ' 23:59:59'])
+			->where('o.canceledTs IS NULL')
+			->where('p.fk_customer IS NOT NULL')
+			->setGroupBy(['p.fk_customer']);
+
+		$map = [];
+
+		foreach ($rows as $row) {
+			$map[$row->customerId] = $row;
+		}
+
+		return $map;
+	}
+
+	/**
+	 * @param array<string> $ids
+	 * @return array<string, string>
+	 */
+	private function loadCustomerNames(array $ids): array
+	{
+		if (!$ids) {
+			return [];
+		}
+
+		$rows = $this->connection->rows(['c' => 'eshop_customer'], [
+			'id' => 'c.uuid',
+			'name' => 'IFNULL(c.company, c.fullname)',
+		])->where('c.uuid', $ids);
+
+		$map = [];
+
+		foreach ($rows as $row) {
+			$map[$row->id] = (string) $row->name;
+		}
+
+		return $map;
+	}
+
+	/**
+	 * Skladová dostupnost, volitelně jen v jednom skladu.
+	 * @param array<string> $productIds
+	 * @return array<string, int>
+	 */
+	private function loadStock(array $productIds, ?string $store): array
+	{
+		$rows = $this->connection->rows(['a' => 'eshop_amount'], [
+			'id' => 'a.fk_product',
+			'available' => 'SUM(a.inStock)',
+		])
+			->where('a.fk_product', $productIds)
+			->setGroupBy(['a.fk_product']);
+
+		if ($store !== null) {
+			$rows->join(['s' => 'eshop_store'], 's.uuid = a.fk_store', [], 'INNER')
+				->where('s.code = :apiStore OR s.uuid = :apiStore', ['apiStore' => $store]);
+		}
+
+		$map = [];
+
+		foreach ($rows as $row) {
+			$map[$row->id] = (int) $row->available;
+		}
+
+		return $map;
 	}
 
 	/**

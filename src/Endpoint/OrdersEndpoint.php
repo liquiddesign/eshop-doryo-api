@@ -164,6 +164,85 @@ final class OrdersEndpoint extends BaseEndpoint
 	}
 
 	/**
+	 * Co se s objednávkou dělo — kdo ji kdy změnil a na co.
+	 *
+	 * Eshop si historii vede sám (přes sto tisíc záznamů), jen ji nikdo nevystavuje. Na otázku
+	 * „proč je ta objednávka pozastavená" nebo „kdo změnil dopravu" je to jediný zdroj pravdy;
+	 * bez toho musí člověk do adminu.
+	 * @param array<string, string> $params
+	 */
+	public function history(array $params, Query $query): Response
+	{
+		$this->one(Order::class, $params['id'], 'Objednávka');
+
+		$collection = $this->connection->rows(['l' => 'eshop_orderlogitem'], [
+			'id' => 'l.uuid',
+			'operation' => 'l.operation',
+			'message' => 'l.message',
+			'createdTs' => 'l.createdTs',
+			'administrator' => 'l.administratorFullName',
+		])
+			->where('l.fk_order', $params['id'])
+			->orderBy(['l.createdTs' => 'ASC'])
+			->setTake($query->limit());
+
+		$items = [];
+
+		foreach ($collection as $row) {
+			$items[] = [
+				'id' => $row->id,
+				'at' => Dates::dateTime($row->createdTs, $this->config->getTimezone()),
+				'operation' => $row->operation,
+				'message' => $row->message,
+				'by' => $row->administrator ?: null,
+			];
+		}
+
+		return Response::list($items, null);
+	}
+
+	/**
+	 * Balíky a doprava objednávky — kde zásilka je a co v ní bylo.
+	 * @param array<string, string> $params
+	 */
+	public function shipments(array $params, Query $query): Response
+	{
+		unset($query);
+
+		$this->one(Order::class, $params['id'], 'Objednávka');
+		$suffix = $this->connection->getMutationSuffix();
+
+		$deliveries = $this->connection->rows(['d' => 'eshop_delivery'], [
+			'id' => 'd.uuid',
+			'type' => "d.typeName$suffix",
+			'trackingLink' => 'dt.trackingLink',
+			'code' => "COALESCE(NULLIF(d.zasilkovnaCode, ''), NULLIF(d.dpdCode, ''), NULLIF(d.pplCode, ''), NULLIF(d.externalId, ''))",
+			'shippedTs' => 'd.shippedTs',
+			'shippingDate' => 'd.shippingDate',
+			'price' => 'd.price',
+		])
+			->join(['dt' => 'eshop_deliverytype'], 'dt.uuid = d.fk_type')
+			->where('d.fk_order', $params['id']);
+
+		$packages = $this->loadPackages($params['id'], $suffix);
+		$items = [];
+
+		foreach ($deliveries as $row) {
+			$items[] = [
+				'deliveryId' => $row->id,
+				'type' => $row->type,
+				'trackingCode' => $row->code ?: null,
+				'trackingUrl' => self::trackingUrl($row),
+				'shippedAt' => Dates::dateTime($row->shippedTs, $this->config->getTimezone()),
+				'shippingDate' => Dates::date($row->shippingDate),
+				'packages' => $packages[$row->id] ?? [],
+			];
+		}
+
+		return Response::list($items, null);
+	}
+
+	/**
 	 * @return \StORM\Collection<\Eshop\DB\Order>
 	 */
 	private function baseCollection(): Collection
@@ -322,112 +401,6 @@ final class OrdersEndpoint extends BaseEndpoint
 		return $mapped;
 	}
 
-	private static function trackingUrl(object $delivery): ?string
-	{
-		$link = $delivery->trackingLink ?? null;
-		$code = $delivery->code ?? null;
-
-		if (!$link || !$code) {
-			return null;
-		}
-
-		return \str_contains($link, '%s') ? \str_replace('%s', \rawurlencode($code), $link) : $link . \rawurlencode($code);
-	}
-
-	/**
-	 * @param iterable<object> $rows
-	 * @return array<string, object>
-	 */
-	private static function index(iterable $rows): array
-	{
-		$map = [];
-
-		foreach ($rows as $row) {
-			$map[$row->id] = $row;
-		}
-
-		return $map;
-	}
-
-	/**
-	 * Co se s objednávkou dělo — kdo ji kdy změnil a na co.
-	 *
-	 * Eshop si historii vede sám (přes sto tisíc záznamů), jen ji nikdo nevystavuje. Na otázku
-	 * „proč je ta objednávka pozastavená" nebo „kdo změnil dopravu" je to jediný zdroj pravdy;
-	 * bez toho musí člověk do adminu.
-	 * @param array<string, string> $params
-	 */
-	public function history(array $params, Query $query): Response
-	{
-		$this->one(Order::class, $params['id'], 'Objednávka');
-
-		$collection = $this->connection->rows(['l' => 'eshop_orderlogitem'], [
-			'id' => 'l.uuid',
-			'operation' => 'l.operation',
-			'message' => 'l.message',
-			'createdTs' => 'l.createdTs',
-			'administrator' => 'l.administratorFullName',
-		])
-			->where('l.fk_order', $params['id'])
-			->orderBy(['l.createdTs' => 'ASC'])
-			->setTake($query->limit());
-
-		$items = [];
-
-		foreach ($collection as $row) {
-			$items[] = [
-				'id' => $row->id,
-				'at' => Dates::dateTime($row->createdTs, $this->config->getTimezone()),
-				'operation' => $row->operation,
-				'message' => $row->message,
-				'by' => $row->administrator ?: null,
-			];
-		}
-
-		return Response::list($items, null);
-	}
-
-	/**
-	 * Balíky a doprava objednávky — kde zásilka je a co v ní bylo.
-	 * @param array<string, string> $params
-	 */
-	public function shipments(array $params, Query $query): Response
-	{
-		unset($query);
-
-		$this->one(Order::class, $params['id'], 'Objednávka');
-		$suffix = $this->connection->getMutationSuffix();
-
-		$deliveries = $this->connection->rows(['d' => 'eshop_delivery'], [
-			'id' => 'd.uuid',
-			'type' => "d.typeName$suffix",
-			'trackingLink' => 'dt.trackingLink',
-			'code' => "COALESCE(NULLIF(d.zasilkovnaCode, ''), NULLIF(d.dpdCode, ''), NULLIF(d.pplCode, ''), NULLIF(d.externalId, ''))",
-			'shippedTs' => 'd.shippedTs',
-			'shippingDate' => 'd.shippingDate',
-			'price' => 'd.price',
-		])
-			->join(['dt' => 'eshop_deliverytype'], 'dt.uuid = d.fk_type')
-			->where('d.fk_order', $params['id']);
-
-		$packages = $this->loadPackages($params['id'], $suffix);
-		$items = [];
-
-		foreach ($deliveries as $row) {
-			$items[] = [
-				'deliveryId' => $row->id,
-				'type' => $row->type,
-				'trackingCode' => $row->code ?: null,
-				'trackingUrl' => self::trackingUrl($row),
-				'shippedAt' => Dates::dateTime($row->shippedTs, $this->config->getTimezone()),
-				'shippingDate' => Dates::date($row->shippingDate),
-				'packages' => $packages[$row->id] ?? [],
-			];
-		}
-
-		return Response::list($items, null);
-	}
-
 	/**
 	 * Balíky po dopravách, i s tím, kolik položek se z nich reálně vyexpedovalo.
 	 * @return array<string, array<array<string, mixed>>>
@@ -461,6 +434,33 @@ final class OrdersEndpoint extends BaseEndpoint
 				'store' => $row->store,
 				'expeditionNumber' => $row->expeditionNumber,
 			];
+		}
+
+		return $map;
+	}
+
+	private static function trackingUrl(object $delivery): ?string
+	{
+		$link = $delivery->trackingLink ?? null;
+		$code = $delivery->code ?? null;
+
+		if (!$link || !$code) {
+			return null;
+		}
+
+		return \str_contains($link, '%s') ? \str_replace('%s', \rawurlencode($code), $link) : $link . \rawurlencode($code);
+	}
+
+	/**
+	 * @param iterable<object> $rows
+	 * @return array<string, object>
+	 */
+	private static function index(iterable $rows): array
+	{
+		$map = [];
+
+		foreach ($rows as $row) {
+			$map[$row->id] = $row;
 		}
 
 		return $map;
