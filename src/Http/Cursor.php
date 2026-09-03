@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace DoryoApi\Http;
 
+use Nette\Utils\Strings;
+
 /**
  * Neprůhledný kurzor pro stránkování. Uvnitř je jen offset — klient s ním nic počítat nemá,
  * jen ho vrátí zpátky v parametru `cursor`.
@@ -32,7 +34,7 @@ final class Cursor
 			throw ApiException::badRequest('Parametr cursor není platný.');
 		}
 
-		$offset = \substr($decoded, \strlen(self::PREFIX));
+		$offset = Strings::substring($decoded, Strings::length(self::PREFIX));
 
 		if (!\ctype_digit($offset)) {
 			throw ApiException::badRequest('Parametr cursor není platný.');

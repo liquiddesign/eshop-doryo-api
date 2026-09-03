@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace DoryoApi\Http;
 
 use DoryoApi\Config;
+use Nette\Utils\Arrays;
+use Nette\Utils\Strings;
 
 /**
  * Parametry dotazu i s validací. Cokoli, co neprojde, je 400 — API nikdy netipuje,
@@ -36,12 +38,11 @@ final class Query
 			throw ApiException::badRequest("Parametr $name musí být řetězec.");
 		}
 
-		return \trim($value);
+		return Strings::trim($value);
 	}
 
 	/**
 	 * Seznam hodnot oddělených čárkou — používá se u fulltextu `q` (čárka = OR).
-	 *
 	 * @return array<string>
 	 */
 	public function strings(string $name): array
@@ -78,13 +79,13 @@ final class Query
 			return $default;
 		}
 
-		$value = \strtolower((string) $this->params[$name]);
+		$value = Strings::lower((string) $this->params[$name]);
 
-		if (\in_array($value, ['1', 'true', 'yes'], true)) {
+		if (Arrays::contains(['1', 'true', 'yes'], $value)) {
 			return true;
 		}
 
-		if (\in_array($value, ['0', 'false', 'no'], true)) {
+		if (Arrays::contains(['0', 'false', 'no'], $value)) {
 			return false;
 		}
 
@@ -150,7 +151,6 @@ final class Query
 	/**
 	 * Časové okno pro seznamy a reporty. Když klient nic neřekne, bere se posledních
 	 * `defaultWindowMonths` měsíců; delší okno než `maxWindowMonths` API odmítne.
-	 *
 	 * @return array{0: string, 1: string} od, do (YYYY-MM-DD)
 	 */
 	public function window(string $fromParam, string $toParam, bool $required = false): array

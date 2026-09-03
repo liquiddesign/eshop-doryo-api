@@ -148,7 +148,6 @@ final class CustomersEndpoint extends BaseEndpoint
 	 *
 	 * Na tohle se ptá obchodník před nabídkou („co mu naceníme?") i před telefonátem
 	 * („co přestal brát?"), a z objednávek po jedné to model složit nemá jak.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function products(array $params, Query $query): Response
@@ -234,7 +233,6 @@ final class CustomersEndpoint extends BaseEndpoint
 	/**
 	 * Počet objednávek, poslední objednávka a obrat — spočítané v SQL za celou stránku.
 	 * Zrušené objednávky se nepočítají.
-	 *
 	 * @param array<string> $ids
 	 * @return array<string, object>
 	 */
@@ -291,7 +289,6 @@ final class CustomersEndpoint extends BaseEndpoint
 	/**
 	 * Obchodník přiřazený zákazníkovi. Ve verzích eshopu, kde tahle vazba na entitě není,
 	 * se čte přímo sloupec — a když není ani ten, zůstane merchantId null.
-	 *
 	 * @param array<string> $ids
 	 * @return array<string, string>
 	 */

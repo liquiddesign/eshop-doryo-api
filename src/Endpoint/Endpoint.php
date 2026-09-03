@@ -12,7 +12,6 @@ interface Endpoint
 {
 	/**
 	 * Vzor cesty (segmenty, proměnná část v {}) => jméno metody na tomhle endpointu.
-	 *
 	 * @return array<string, string>
 	 */
 	public function getRoutes(): array;

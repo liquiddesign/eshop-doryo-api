@@ -32,6 +32,7 @@ use Nette\DI\CompilerExtension;
 use Nette\DI\Definitions\Statement;
 use Nette\Schema\Expect;
 use Nette\Schema\Schema;
+use Nette\Utils\Strings;
 
 /**
  * Registrace API do shopu.
@@ -138,7 +139,7 @@ final class DoryoApiDI extends CompilerExtension
 		$builder->addDefinition($this->prefix('presenter'))->setFactory(ApiPresenter::class)->setAutowired(false);
 
 		// vlastní RouteList, který se před kompilací předřadí routám shopu
-		$prefix = \trim($config->prefix, '/');
+		$prefix = Strings::trim($config->prefix, '/');
 		$builder->addDefinition($this->prefix('routes'))
 			->setFactory(RouteList::class)
 			->addSetup('addRoute', ["$prefix/openapi.json", self::PRESENTER_MODULE . ':Api:openapi'])

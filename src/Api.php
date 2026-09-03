@@ -10,6 +10,7 @@ use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
 use DoryoApi\OpenApi\Specification;
 use Nette\Http\IRequest;
+use Nette\Utils\Strings;
 
 /**
  * Vstupní bod API: metoda, autentizace, směrování, logování. Presenter už jen obalí výsledek
@@ -29,7 +30,7 @@ final class Api
 	public function handle(IRequest $request, string $path): Response
 	{
 		$started = \microtime(true);
-		$path = \trim($path, '/');
+		$path = Strings::trim($path, '/');
 		$params = $request->getQuery();
 		$response = null;
 

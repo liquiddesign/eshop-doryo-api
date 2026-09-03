@@ -13,6 +13,7 @@ use DoryoApi\Mapper\ProductMapper;
 use DoryoApi\Support\Dates;
 use DoryoApi\Support\ProductCode;
 use Eshop\DB\Product;
+use Nette\Utils\Strings;
 use StORM\Collection;
 use StORM\DIConnection;
 
@@ -108,7 +109,6 @@ final class ProductsEndpoint extends BaseEndpoint
 
 	/**
 	 * Detail podle kódu, ne podle uuid — člověk diktuje kód, ne identifikátor.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function detailByCode(array $params, Query $query): Response
@@ -131,7 +131,6 @@ final class ProductsEndpoint extends BaseEndpoint
 	 * Vrací i rozpad po skladech, protože samotný součet odpovídá na „máme to skladem?"
 	 * zavádějícím způsobem: shop má vedle vlastního skladu i sklady dodavatelů, které jsou
 	 * o řády větší. Obchodník se ptá na ten vlastní.
-	 *
 	 * @param array<string> $productIds
 	 * @return array<string, array<string, mixed>>
 	 */
@@ -263,7 +262,6 @@ final class ProductsEndpoint extends BaseEndpoint
 	/**
 	 * Nejnižší cena z veřejných ceníků. Kdyby jich shop měl víc, vyhrává ta nižší —
 	 * stejně jako v katalogu.
-	 *
 	 * @param array<string> $ids
 	 * @return array<string, object>
 	 */
@@ -349,7 +347,6 @@ final class ProductsEndpoint extends BaseEndpoint
 
 	/**
 	 * Produkt je skrytý, když je skrytý ve všech viditelnostech, které shop používá.
-	 *
 	 * @param array<string> $ids
 	 * @return array<string, bool>
 	 */
@@ -398,7 +395,6 @@ final class ProductsEndpoint extends BaseEndpoint
 	/**
 	 * Veřejná adresa produktu. Bere se ze stránek (balík liquiddesign/web); když je shop
 	 * nemá, zůstane null — API kvůli tomu nespadne.
-	 *
 	 * @param array<string> $ids
 	 * @return array<string, string>
 	 */
@@ -419,7 +415,7 @@ final class ProductsEndpoint extends BaseEndpoint
 			$map = [];
 
 			foreach ($rows as $row) {
-				$id = \substr((string) $row->params, \strlen('product='), -1);
+				$id = Strings::substring((string) $row->params, Strings::length('product='), -1);
 				$map[$id] = ($base !== null ? \rtrim($base, '/') : '') . '/' . \ltrim((string) $row->url, '/');
 			}
 
@@ -431,7 +427,6 @@ final class ProductsEndpoint extends BaseEndpoint
 
 	/**
 	 * Hodnocení produktu od zákazníků.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function reviews(array $params, Query $query): Response
@@ -474,7 +469,6 @@ final class ProductsEndpoint extends BaseEndpoint
 	/**
 	 * Filtr podle parametrů produktu: `attribute=objem:300ml` (víc dvojic přes čárku, platí AND).
 	 * Hledá se podle kódu i podle názvu, protože člověk diktuje název.
-	 *
 	 * @param \StORM\Collection<\Eshop\DB\Product> $collection
 	 */
 	private function filterByAttributes(Collection $collection, Query $query, string $suffix): void
@@ -496,14 +490,13 @@ final class ProductsEndpoint extends BaseEndpoint
 					WHERE (a.code = :$attributeKey OR a.name$suffix = :$attributeKey)
 						AND (av.code = :$valueKey OR av.label$suffix = :$valueKey)
 				)",
-				[$attributeKey => \trim($attribute), $valueKey => \trim($value)],
+				[$attributeKey => Strings::trim($attribute), $valueKey => Strings::trim($value)],
 			);
 		}
 	}
 
 	/**
 	 * Parametry produktů — jeden dotaz za celou stránku.
-	 *
 	 * @param array<string> $ids
 	 * @return array<string, array<array<string, mixed>>>
 	 */

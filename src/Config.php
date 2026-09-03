@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace DoryoApi;
 
+use Nette\Utils\Strings;
+
 /**
  * Konfigurace čtecího API pro Doryo.
  *
@@ -61,7 +63,7 @@ final class Config
 
 	public function getPrefix(): string
 	{
-		return \trim($this->prefix, '/');
+		return Strings::trim($this->prefix, '/');
 	}
 
 	/**

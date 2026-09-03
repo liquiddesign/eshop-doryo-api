@@ -92,7 +92,6 @@ final class Codebooks
 	 * Ceníky, ze kterých se bere veřejná cena produktu. Buď jsou vyjmenované v konfiguraci,
 	 * nebo se vezmou z výchozí skupiny zákazníků — tedy přesně to, co v katalogu vidí
 	 * nepřihlášený návštěvník. Ceníky konkrétního zákazníka do API nepatří.
-	 *
 	 * @return array<string>
 	 */
 	public function getDefaultPricelists(): array
@@ -122,13 +121,13 @@ final class Codebooks
 			return $this->defaultPricelists = [];
 		}
 
-		$rows = $this->connection->rows(['nxn' => 'eshop_customergroup_nxn_eshop_pricelist'], ['fk_pricelist' => 'nxn.fk_pricelist'])
+		$rows = $this->connection->rows(['nxn' => 'eshop_customergroup_nxn_eshop_pricelist'], ['pricelist' => 'nxn.fk_pricelist'])
 			->where('nxn.fk_customergroup', $groupId);
 
 		$ids = [];
 
 		foreach ($rows as $row) {
-			$ids[] = $row->fk_pricelist;
+			$ids[] = $row->pricelist;
 		}
 
 		return $this->defaultPricelists = $ids;

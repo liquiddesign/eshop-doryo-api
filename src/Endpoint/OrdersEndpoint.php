@@ -79,7 +79,6 @@ final class OrdersEndpoint extends BaseEndpoint
 
 	/**
 	 * Detail podle čísla objednávky — to je to, co má člověk před sebou.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function detailByNumber(array $params, Query $query): Response
@@ -176,7 +175,6 @@ final class OrdersEndpoint extends BaseEndpoint
 	/**
 	 * Dávkově dotáhne všechno, co mapper k objednávkám potřebuje: nákupy, adresy, ceny,
 	 * platby, dopravy a faktury. Pět dotazů na stránku bez ohledu na to, kolik má položek.
-	 *
 	 * @param array<string, \Eshop\DB\Order> $orders
 	 * @return array<string, array<string, mixed>>
 	 */
@@ -291,13 +289,13 @@ final class OrdersEndpoint extends BaseEndpoint
 	 */
 	private function loadInvoiceIds(array $orderIds): array
 	{
-		$rows = $this->connection->rows(['nxn' => 'eshop_invoice_nxn_eshop_order'], ['fk_order' => 'nxn.fk_order', 'fk_invoice' => 'nxn.fk_invoice'])
+		$rows = $this->connection->rows(['nxn' => 'eshop_invoice_nxn_eshop_order'], ['order' => 'nxn.fk_order', 'invoice' => 'nxn.fk_invoice'])
 			->where('nxn.fk_order', $orderIds);
 
 		$map = [];
 
 		foreach ($rows as $row) {
-			$map[$row->fk_order][] = $row->fk_invoice;
+			$map[$row->order][] = $row->invoice;
 		}
 
 		return $map;
@@ -357,7 +355,6 @@ final class OrdersEndpoint extends BaseEndpoint
 	 * Eshop si historii vede sám (přes sto tisíc záznamů), jen ji nikdo nevystavuje. Na otázku
 	 * „proč je ta objednávka pozastavená" nebo „kdo změnil dopravu" je to jediný zdroj pravdy;
 	 * bez toho musí člověk do adminu.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function history(array $params, Query $query): Response
@@ -392,7 +389,6 @@ final class OrdersEndpoint extends BaseEndpoint
 
 	/**
 	 * Balíky a doprava objednávky — kde zásilka je a co v ní bylo.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function shipments(array $params, Query $query): Response
@@ -434,7 +430,6 @@ final class OrdersEndpoint extends BaseEndpoint
 
 	/**
 	 * Balíky po dopravách, i s tím, kolik položek se z nich reálně vyexpedovalo.
-	 *
 	 * @return array<string, array<array<string, mixed>>>
 	 */
 	private function loadPackages(string $orderId, string $suffix): array

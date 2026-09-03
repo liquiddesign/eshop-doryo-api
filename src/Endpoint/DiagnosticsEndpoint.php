@@ -10,6 +10,7 @@ use DoryoApi\Support\Dates;
 use DoryoApi\Support\Money;
 use Eshop\DB\Invoice;
 use Eshop\DB\Product;
+use Nette\Utils\Arrays;
 
 /**
  * Diagnostika — odpovědi na otázky „proč".
@@ -41,7 +42,6 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 
 	/**
 	 * Proč produkt není (nebo je) vidět na webu.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function productVisibility(array $params, Query $query): Response
@@ -135,7 +135,6 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 
 	/**
 	 * Proč u produktu není obrázek.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function productMedia(array $params, Query $query): Response
@@ -192,7 +191,7 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 			'productId' => $id,
 			'code' => $product->getFullCode(),
 			'name' => $product->name,
-			'hasImage' => (bool) $product->imageFileName && \in_array(true, $files, true),
+			'hasImage' => (bool) $product->imageFileName && Arrays::contains($files, true),
 			'findings' => $findings,
 			'checks' => [
 				'imageFileName' => $product->imageFileName ?: null,
@@ -208,7 +207,6 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 
 	/**
 	 * Proč faktura vypadá tak, jak vypadá — jaká pole rozhodla o jejím stavu.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function invoicePayment(array $params, Query $query): Response
@@ -428,7 +426,6 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 
 	/**
 	 * Existence souborů obrázku v jednotlivých velikostech.
-	 *
 	 * @return array<string, bool>
 	 */
 	private function checkFiles(string $dir, string $fileName): array

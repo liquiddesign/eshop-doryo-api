@@ -11,6 +11,7 @@ use DoryoApi\Support\Dates;
 use DoryoApi\Support\Money;
 use DoryoApi\Support\OrderTotals;
 use DoryoApi\Support\Sql;
+use Nette\Utils\Arrays;
 
 /**
  * Souhrny, aby model nemusel stahovat objednávky po jedné. Všechno se počítá v SQL
@@ -53,7 +54,7 @@ final class ReportsEndpoint extends BaseEndpoint
 		[$from, $to] = $query->window('from', 'to');
 		$groupBy = $query->string('groupBy', 'month');
 
-		if (!\in_array($groupBy, self::GROUP_BY, true)) {
+		if (!Arrays::contains(self::GROUP_BY, $groupBy)) {
 			throw ApiException::badRequest('Parametr groupBy musí být jeden z: ' . \implode(', ', self::GROUP_BY) . '.');
 		}
 
@@ -118,7 +119,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	 * nejdřív objednávky (pár tisíc řádků), pak položky jejich košíků. Jedním spojeným
 	 * dotazem to nejde — eshop nemá index na `eshop_order.createdTs`, takže si databáze
 	 * vybere jako výchozí tabulku tříapůlmilionový `eshop_cartitem` a report běží minuty.
-	 *
 	 * @return array<string>
 	 */
 	private function purchasesInWindow(string $from, string $to): array
@@ -191,7 +191,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	 * objednávek — dopravu a platbu do kategorie zařadit nejde. Produkt se počítá do jedné
 	 * kategorie (té s nejnižším UUID), aby se stejná položka nesečetla vícekrát; `orders` je
 	 * počet různých objednávek, ve kterých se kategorie objevila.
-	 *
 	 * @return array<array<string, mixed>>
 	 */
 	private function salesByItems(string $from, string $to, string $dimension): array
@@ -242,7 +241,6 @@ final class ReportsEndpoint extends BaseEndpoint
 
 	/**
 	 * Prodeje po položkách za okno — společný základ reportů, které jdou pod úroveň objednávky.
-	 *
 	 * @return array<object>
 	 */
 	private function loadItemSales(string $from, string $to): array
@@ -276,7 +274,6 @@ final class ReportsEndpoint extends BaseEndpoint
 
 	/**
 	 * Hlavní kategorie produktů — jedna na produkt, ať se položka nezapočítá vícekrát.
-	 *
 	 * @param array<string> $productIds
 	 * @return array<string, string> id produktu => název kategorie
 	 */
@@ -367,7 +364,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	/**
 	 * Kdo roste a kdo padá. Obrat a počet objednávek za období proti srovnávacímu období;
 	 * když srovnávací období klient neurčí, bere se stejně dlouhé bezprostředně předchozí.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function customers(array $params, Query $query): Response
@@ -417,7 +413,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	/**
 	 * Pohledávky po zákaznících — kolik a jak dlouho dluží. Neuhrazené faktury se sčítají
 	 * do pásem stáří, ať model nemusí stránkovat doklady a počítat je sám.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function receivables(array $params, Query $query): Response
@@ -481,7 +476,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	/**
 	 * Kdo přestal odebírat: zákazníci, kteří mívali objednávky, ale poslední mají starší než
 	 * `inactiveDays`. Vrací i to, co u nich shop dřív utržil — ať je vidět, o co jde.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function churn(array $params, Query $query): Response
@@ -538,7 +532,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	 *
 	 * Bez parametru `store` se sčítají všechny sklady včetně dodavatelských; na otázku
 	 * „musíme objednat?" se ptej na vlastní sklad (`store=<kód>`, seznam dá /v1/meta/codebooks).
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function replenishment(array $params, Query $query): Response
@@ -675,7 +668,6 @@ final class ReportsEndpoint extends BaseEndpoint
 
 	/**
 	 * Skladová dostupnost, volitelně jen v jednom skladu.
-	 *
 	 * @param array<string> $productIds
 	 * @return array<string, int>
 	 */
@@ -705,7 +697,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	/**
 	 * Co čeká na expedici a jak dlouho. Přijaté a nedokončené objednávky se stářím —
 	 * na otázku „co nám leží" a „co je nejstarší".
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function fulfillment(array $params, Query $query): Response
@@ -757,7 +748,6 @@ final class ReportsEndpoint extends BaseEndpoint
 
 	/**
 	 * Produkty podle hodnocení — hledá se hlavně to špatné, proto výchozí řazení od nejhoršího.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function reviews(array $params, Query $query): Response
@@ -805,7 +795,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	/**
 	 * Jak dopadly importy od dodavatelů. Na „proč nemá produkt novou cenu" je tohle první
 	 * místo, kam se dívat.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function imports(array $params, Query $query): Response
@@ -865,7 +854,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	 *
 	 * Je to diagnostika viditelnosti zvednutá na celý katalog: místo proklikávání produkt
 	 * po produktu jeden přehled „co opravit", ke každé kategorii problému pár ukázek.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function catalogHealth(array $params, Query $query): Response
@@ -927,7 +915,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	/**
 	 * Doklady, které nemají protějšek: objednávky bez faktury, faktury bez objednávky
 	 * a objednávky nezaexportované do ERP.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function unlinked(array $params, Query $query): Response
@@ -995,7 +982,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	 *
 	 * A pozor na výklad čísla: košíky zakládají i nepřihlášení návštěvníci a roboti, takže
 	 * `value` je horní odhad „co se nedotáhlo", ne ušlá tržba. Proto je v odpovědi i `note`.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function abandonedCarts(array $params, Query $query): Response

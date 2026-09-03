@@ -24,7 +24,6 @@ final class ProductCode
 
 	/**
 	 * Podmínka „tenhle produkt má tenhle kód".
-	 *
 	 * @param \StORM\Collection<\Eshop\DB\Product> $collection
 	 * @param array<string> $codes
 	 */

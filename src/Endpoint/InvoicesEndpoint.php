@@ -73,7 +73,6 @@ final class InvoicesEndpoint extends BaseEndpoint
 
 	/**
 	 * Detail podle čísla faktury.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function detailByNumber(array $params, Query $query): Response
@@ -199,13 +198,13 @@ final class InvoicesEndpoint extends BaseEndpoint
 	 */
 	private function loadOrderIds(array $invoiceIds): array
 	{
-		$rows = $this->connection->rows(['nxn' => 'eshop_invoice_nxn_eshop_order'], ['fk_invoice' => 'nxn.fk_invoice', 'fk_order' => 'nxn.fk_order'])
+		$rows = $this->connection->rows(['nxn' => 'eshop_invoice_nxn_eshop_order'], ['invoice' => 'nxn.fk_invoice', 'order' => 'nxn.fk_order'])
 			->where('nxn.fk_invoice', $invoiceIds);
 
 		$map = [];
 
 		foreach ($rows as $row) {
-			$map[$row->fk_invoice][] = $row->fk_order;
+			$map[$row->invoice][] = $row->order;
 		}
 
 		return $map;

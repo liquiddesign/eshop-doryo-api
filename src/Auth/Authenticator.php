@@ -7,6 +7,7 @@ namespace DoryoApi\Auth;
 use DoryoApi\Config;
 use DoryoApi\Http\ApiException;
 use Nette\Http\IRequest;
+use Nette\Utils\Strings;
 
 /**
  * Bearer token a volitelný whitelist IP. Bez tokenu v konfiguraci je API celé vypnuté —
@@ -35,7 +36,7 @@ final class Authenticator
 			throw ApiException::unauthorized('Chybí hlavička Authorization: Bearer <token>.');
 		}
 
-		if (!\hash_equals($token, \substr($header, 7))) {
+		if (!\hash_equals($token, Strings::substring($header, 7))) {
 			throw ApiException::unauthorized('Neplatný token.');
 		}
 
@@ -70,6 +71,9 @@ final class Authenticator
 		$ipBinary = \inet_pton($ip);
 		$subnetBinary = \inet_pton($subnet);
 
+		// binární porovnání, ne textové: Nette\Utils\Strings je UTF-8 aware a na bajtech
+		// z inet_pton() by počítalo znaky, ne oktety
+		// phpcs:ignore Generic.PHP.ForbiddenFunctions.FoundWithAlternative
 		if ($ipBinary === false || $subnetBinary === false || \strlen($ipBinary) !== \strlen($subnetBinary)) {
 			return false;
 		}
@@ -78,6 +82,7 @@ final class Authenticator
 		$bytes = \intdiv($bits, 8);
 		$remainder = $bits % 8;
 
+		// phpcs:ignore Generic.PHP.ForbiddenFunctions.FoundWithAlternative
 		if (\substr($ipBinary, 0, $bytes) !== \substr($subnetBinary, 0, $bytes)) {
 			return false;
 		}

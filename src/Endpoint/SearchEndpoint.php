@@ -8,6 +8,7 @@ use DoryoApi\Http\ApiException;
 use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
 use DoryoApi\Support\Sql;
+use Nette\Utils\Strings;
 
 /**
  * Jedno hledání napříč doménami.
@@ -102,7 +103,7 @@ final class SearchEndpoint extends BaseEndpoint
 				\Eshop\DB\Order::class,
 				static fn ($entity): array => [
 					'label' => $entity->code,
-					'detail' => 'objednávka z ' . \substr((string) $entity->createdTs, 0, 10),
+					'detail' => 'objednávka z ' . Strings::substring((string) $entity->createdTs, 0, 10),
 				],
 				static fn ($collection) => $collection
 					->join(['purchase' => 'eshop_purchase'], 'purchase.uuid = this.fk_purchase', [], 'INNER')

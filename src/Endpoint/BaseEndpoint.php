@@ -44,7 +44,6 @@ abstract class BaseEndpoint implements Endpoint
 	/**
 	 * Stránka výsledků. Bere se o jeden záznam víc, než klient chtěl — z toho se pozná,
 	 * jestli má smysl posílat další kurzor, a nemusí se počítat COUNT přes celou tabulku.
-	 *
 	 * @param \StORM\Collection<\StORM\Entity> $collection
 	 * @return array{rows: array<string, \StORM\Entity>, nextCursor: string|null}
 	 */
@@ -102,7 +101,6 @@ abstract class BaseEndpoint implements Endpoint
 
 	/**
 	 * Dávkové dotažení entit podle cizích klíčů ze stránky.
-	 *
 	 * @template T of \StORM\Entity
 	 * @param class-string<T> $entityClass
 	 * @param array<string|null> $ids
@@ -121,7 +119,6 @@ abstract class BaseEndpoint implements Endpoint
 
 	/**
 	 * Cizí klíče relace přes celou stránku.
-	 *
 	 * @param array<\StORM\Entity> $entities
 	 * @return array<string>
 	 */

@@ -8,6 +8,7 @@ use DoryoApi\Support\Dates;
 use DoryoApi\Support\Money;
 use Eshop\DB\Order;
 use Eshop\DB\Purchase;
+use Nette\Utils\Arrays;
 
 /**
  * Objednávka. `status` je normalizovaný slovník podle konfigurace, původní stav shopu
@@ -42,7 +43,7 @@ final class OrderMapper extends Mapper
 		$shopState = self::shopState($order);
 
 		foreach ($this->config->getOrderStates() as $status => $states) {
-			if (\in_array($shopState, $states, true)) {
+			if (Arrays::contains($states, $shopState)) {
 				return $status;
 			}
 		}

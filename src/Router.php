@@ -6,6 +6,7 @@ namespace DoryoApi;
 
 use DoryoApi\Endpoint\Endpoint;
 use DoryoApi\Http\ApiException;
+use Nette\Utils\Strings;
 
 /**
  * Statická tabulka cest. Žádné regulární výrazy nad celou cestou — porovnávají se segmenty,
@@ -24,7 +25,7 @@ final class Router
 		foreach ($endpoints as $endpoint) {
 			foreach ($endpoint->getRoutes() as $pattern => $method) {
 				$this->routes[] = [
-					'segments' => \explode('/', \trim($pattern, '/')),
+					'segments' => \explode('/', Strings::trim($pattern, '/')),
 					'handler' => [$endpoint, $method],
 				];
 			}
@@ -37,7 +38,7 @@ final class Router
 	 */
 	public function match(string $path): array
 	{
-		$segments = \explode('/', \trim($path, '/'));
+		$segments = \explode('/', Strings::trim($path, '/'));
 
 		foreach ($this->routes as $route) {
 			$params = self::matchSegments($route['segments'], $segments);
@@ -79,7 +80,7 @@ final class Router
 					return null;
 				}
 
-				$params[\trim($part, '{}')] = \rawurldecode($value);
+				$params[Strings::trim($part, '{}')] = \rawurldecode($value);
 
 				continue;
 			}

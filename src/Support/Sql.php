@@ -14,7 +14,6 @@ final class Sql
 {
 	/**
 	 * Podmínka „některý ze sloupců obsahuje některý z termínů".
-	 *
 	 * @param array<string> $columns
 	 * @param array<string> $terms
 	 * @return array{0: string, 1: array<string, string>}|null výraz a hodnoty pro bind
@@ -46,7 +45,6 @@ final class Sql
 	 * StORM umí navázat pole jen ve tvaru `where('sloupec', $pole)`; jakmile je potřeba pole
 	 * ve složitějším výrazu (třeba `kód NEBO kód.podkód`), musí se hodnoty ocitovat rovnou.
 	 * Citování dělá PDO, ne konkatenace.
-	 *
 	 * @param array<string> $values
 	 */
 	public static function inList(\StORM\Connection $connection, array $values): string

@@ -8,6 +8,7 @@ use DoryoApi\Config;
 use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
 use DoryoApi\Support\Dates;
+use Nette\Utils\Strings;
 
 /**
  * Health. Bez platného tokenu odpoví jen „běžím" — o shopu neřekne nic, aby se z veřejné
@@ -67,7 +68,6 @@ final class MetaEndpoint extends BaseEndpoint
 	 *
 	 * Bez tohohle model tipuje jména („ceník PC_A"? „sklad Praha"?) a plýtvá voláními, než
 	 * najde, co v shopu vůbec existuje. Je to malý slovník na začátek konverzace.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function codebooks(array $params, Query $query): Response
@@ -124,7 +124,6 @@ final class MetaEndpoint extends BaseEndpoint
 	/**
 	 * Strom kategorií. `path` je materializovaná cesta, takže z ní jde poznat zanoření
 	 * i pořadí bez dalšího dotazu.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function categories(array $params, Query $query): Response
@@ -154,7 +153,7 @@ final class MetaEndpoint extends BaseEndpoint
 				'name' => $category->name,
 				'fullName' => self::stringValue($category, 'fullName'),
 				'path' => $category->path,
-				'level' => (int) (\strlen((string) $category->path) / 4),
+				'level' => (int) (Strings::length((string) $category->path) / 4),
 				'hidden' => (bool) $category->hidden,
 			];
 		}
@@ -220,7 +219,6 @@ final class MetaEndpoint extends BaseEndpoint
 	 *
 	 * Počty jsou odhad ze statistik tabulek (přesný COUNT přes miliony řádků by tenhle
 	 * přehled zdržel o vteřiny); od toho je to přehled, ne report.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function capabilities(array $params, Query $query): Response
@@ -269,7 +267,6 @@ final class MetaEndpoint extends BaseEndpoint
 
 	/**
 	 * Dodavatelé i s tím, kdy od nich naposled přišel import.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function suppliers(array $params, Query $query): Response
@@ -310,7 +307,6 @@ final class MetaEndpoint extends BaseEndpoint
 
 	/**
 	 * Odhad počtu řádků tabulek ze statistik databáze — bez skenování dat.
-	 *
 	 * @return array<string, int>
 	 */
 	private function tableRows(): array

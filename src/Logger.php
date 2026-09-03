@@ -23,7 +23,7 @@ final class Logger
 		unset($params['token']);
 
 		$line = \json_encode([
-			'ts' => \date('c'),
+			'ts' => (new \DateTimeImmutable())->format('c'),
 			'path' => $path,
 			'params' => $params,
 			'status' => $status,

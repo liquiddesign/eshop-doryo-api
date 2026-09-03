@@ -77,7 +77,6 @@ final class PricesEndpoint extends BaseEndpoint
 
 	/**
 	 * Ceny jednoho ceníku. Tohle je „ceníková cena", ne cena konkrétního zákazníka.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function prices(array $params, Query $query): Response
@@ -97,7 +96,6 @@ final class PricesEndpoint extends BaseEndpoint
 
 	/**
 	 * Ceny, které má konkrétní zákazník — jeho ceníky, jeho slevová hladina, jeho strop slevy.
-	 *
 	 * @param array<string, string> $params
 	 */
 	public function customerPrices(array $params, Query $query): Response
@@ -123,7 +121,6 @@ final class PricesEndpoint extends BaseEndpoint
 	/**
 	 * Ceníky zákazníka. Když nemá vlastní, platí pro něj ceníky jeho skupiny — tak to má
 	 * i katalog. Kupónové ceníky se vynechávají, nabídka se nedělá „za kupón".
-	 *
 	 * @return array<string>
 	 */
 	private function resolveCustomerPricelists(Customer $customer): array
@@ -168,7 +165,6 @@ final class PricesEndpoint extends BaseEndpoint
 	/**
 	 * Slevová hladina zákazníka, strop slevy na produkt a pevná marže. Věrnostní program
 	 * hladinu přebíjí, když je vyšší — stejně jako v katalogu.
-	 *
 	 * @return array{0: int, 1: int, 2: float}
 	 */
 	private function resolveCustomerDiscount(Customer $customer): array
@@ -209,7 +205,6 @@ final class PricesEndpoint extends BaseEndpoint
 	/**
 	 * Společné jádro obou cenových endpointů: ceny vyjmenovaných ceníků pro stránku produktů,
 	 * z nich vítězná (nejnižší priorita, pak nejnižší cena) — tak, jak vybírá katalog.
-	 *
 	 * @param array<string> $pricelists
 	 */
 	private function listPrices(array $pricelists, Query $query, int $discountLevel, int $maxDiscount, float $surcharge, ?string $customerId): Response
@@ -316,7 +311,6 @@ final class PricesEndpoint extends BaseEndpoint
 
 	/**
 	 * Kolik produktů a zákazníků ceník má — ať model pozná, který ceník je ten „hlavní".
-	 *
 	 * @param array<string> $ids
 	 * @return array<string, array<string, int>>
 	 */
