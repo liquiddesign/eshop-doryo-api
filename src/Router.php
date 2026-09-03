@@ -18,7 +18,7 @@ final class Router
 	private array $routes = [];
 
 	/**
-	 * @param array<\DoryoApi\Endpoint\Endpoint> $endpoints
+	 * @param array<Endpoint> $endpoints
 	 */
 	public function __construct(array $endpoints)
 	{

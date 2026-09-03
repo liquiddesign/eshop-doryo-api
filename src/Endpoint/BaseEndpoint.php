@@ -129,9 +129,11 @@ abstract class BaseEndpoint implements Endpoint
 		foreach ($entities as $entity) {
 			$value = self::idValue($entity, $relation);
 
-			if ($value !== null) {
-				$ids[$value] = $value;
+			if ($value === null) {
+				continue;
 			}
+
+			$ids[$value] = $value;
 		}
 
 		return \array_values($ids);

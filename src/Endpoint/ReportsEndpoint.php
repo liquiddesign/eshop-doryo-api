@@ -429,7 +429,7 @@ final class ReportsEndpoint extends BaseEndpoint
 		$rows = $this->connection->rows(['i' => 'eshop_invoice'], [
 			'customerId' => 'i.fk_customer',
 			'groupKey' => 'IFNULL(i.fk_customer, IFNULL(i.ic, i.subject))',
-			'name' => "IFNULL(IFNULL(c.company, c.fullname), i.subject)",
+			'name' => 'IFNULL(IFNULL(c.company, c.fullname), i.subject)',
 			'invoices' => 'COUNT(*)',
 			'outstanding' => "SUM($amount)",
 			'overdue' => "SUM(IF(i.dueDate < '$today', $amount, 0))",
@@ -709,7 +709,7 @@ final class ReportsEndpoint extends BaseEndpoint
 		$rows = $this->connection->rows(['o' => 'eshop_order'], [
 			'id' => 'o.uuid',
 			'number' => 'o.code',
-			'customer' => "IFNULL(IFNULL(c.company, c.fullname), p.fullname)",
+			'customer' => 'IFNULL(IFNULL(c.company, c.fullname), p.fullname)',
 			'createdTs' => 'o.createdTs',
 			'receivedTs' => 'o.receivedTs',
 			'desiredShippingDate' => 'p.desiredShippingDate',
@@ -870,12 +870,31 @@ final class ReportsEndpoint extends BaseEndpoint
 			: null;
 
 		$checks = [
-			'no-visibility-list' => ['detail' => 'Není v žádném viditelnostním seznamu — katalog ho nemá kde vzít.', 'where' => 'this.uuid NOT IN (SELECT v.fk_product FROM eshop_visibilitylistitem v)'],
-			'hidden-everywhere' => ['detail' => 'Je skrytý ve všech viditelnostech, ve kterých je.', 'where' => 'this.uuid IN (SELECT v.fk_product FROM eshop_visibilitylistitem v GROUP BY v.fk_product HAVING MIN(v.hidden) = 1)'],
-			'no-category' => ['detail' => 'Není v žádné kategorii — z menu se na něj nedá doklikat.', 'where' => 'this.uuid NOT IN (SELECT nxn.fk_product FROM eshop_product_nxn_eshop_category nxn)'],
-			'no-image' => ['detail' => 'Nemá nastavený obrázek.', 'where' => "this.imageFileName IS NULL OR this.imageFileName = ''"],
-			'no-price' => ['detail' => 'Nemá cenu ve veřejném ceníku — nepřihlášený návštěvník ho neuvidí.', 'where' => $pricelistCondition],
-			'no-ean' => ['detail' => 'Nemá EAN — vadí to feedům a párování s dodavateli.', 'where' => "this.ean IS NULL OR this.ean = ''"],
+			'no-visibility-list' => [
+				'detail' => 'Není v žádném viditelnostním seznamu — katalog ho nemá kde vzít.',
+				'where' => 'this.uuid NOT IN (SELECT v.fk_product FROM eshop_visibilitylistitem v)',
+			],
+			'hidden-everywhere' => [
+				'detail' => 'Je skrytý ve všech viditelnostech, ve kterých je.',
+				'where' => 'this.uuid IN (SELECT v.fk_product FROM eshop_visibilitylistitem v
+					GROUP BY v.fk_product HAVING MIN(v.hidden) = 1)',
+			],
+			'no-category' => [
+				'detail' => 'Není v žádné kategorii — z menu se na něj nedá doklikat.',
+				'where' => 'this.uuid NOT IN (SELECT nxn.fk_product FROM eshop_product_nxn_eshop_category nxn)',
+			],
+			'no-image' => [
+				'detail' => 'Nemá nastavený obrázek.',
+				'where' => "this.imageFileName IS NULL OR this.imageFileName = ''",
+			],
+			'no-price' => [
+				'detail' => 'Nemá cenu ve veřejném ceníku — nepřihlášený návštěvník ho neuvidí.',
+				'where' => $pricelistCondition,
+			],
+			'no-ean' => [
+				'detail' => 'Nemá EAN — vadí to feedům a párování s dodavateli.',
+				'where' => "this.ean IS NULL OR this.ean = ''",
+			],
 		];
 
 		$items = [];

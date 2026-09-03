@@ -93,6 +93,9 @@ final class Authenticator
 
 		$mask = \chr(0xFF << (8 - $remainder) & 0xFF);
 
-		return (($ipBinary[$bytes] ?? "\0") & $mask) === (($subnetBinary[$bytes] ?? "\0") & $mask);
+		$ipByte = $ipBinary[$bytes] ?? "\0";
+		$subnetByte = $subnetBinary[$bytes] ?? "\0";
+
+		return ($ipByte & $mask) === ($subnetByte & $mask);
 	}
 }

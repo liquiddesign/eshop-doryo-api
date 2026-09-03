@@ -148,6 +148,7 @@ final class CustomersEndpoint extends BaseEndpoint
 	 *
 	 * Na tohle se ptá obchodník před nabídkou („co mu naceníme?") i před telefonátem
 	 * („co přestal brát?"), a z objednávek po jedné to model složit nemá jak.
+	 *
 	 * @param array<string, string> $params
 	 */
 	public function products(array $params, Query $query): Response

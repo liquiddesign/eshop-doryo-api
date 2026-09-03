@@ -225,5 +225,4 @@ final class InvoicesEndpoint extends BaseEndpoint
 
 		return $mapped;
 	}
-
 }
