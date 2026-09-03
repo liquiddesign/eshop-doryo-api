@@ -1,0 +1,23 @@
+{
+    "name": "liquiddesign/eshop-doryo-api",
+    "description": "Čtecí API e-shopu pro Doryo — objednávky, zákazníci, produkty, sklad a faktury v jednotné projekci",
+    "type": "library",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.2",
+        "liquiddesign/eshop": "^2.0",
+        "liquiddesign/storm": "^2.0",
+        "nette/application": "^3.1 || ^3.2",
+        "nette/di": "^3.1 || ^3.2",
+        "nette/http": "^3.2 || ^3.3",
+        "nette/schema": "^1.2 || ^1.3",
+        "ext-json": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "DoryoApi\\": "src/"
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
