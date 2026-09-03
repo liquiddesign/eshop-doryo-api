@@ -77,7 +77,7 @@ final class SearchEndpoint extends BaseEndpoint
 				$terms,
 				$limit,
 				\Eshop\DB\Product::class,
-				fn ($entity): array => [
+				fn (\Eshop\DB\Product $entity): array => [
 					'label' => $entity->getFullCode() . ' — ' . $entity->name,
 					'detail' => 'produkt',
 				],
@@ -89,7 +89,7 @@ final class SearchEndpoint extends BaseEndpoint
 				$terms,
 				$limit,
 				\Eshop\DB\Customer::class,
-				static fn ($entity): array => [
+				static fn (\Eshop\DB\Customer $entity): array => [
 					'label' => $entity->company ?: $entity->fullname,
 					'detail' => \implode(', ', \array_filter([$entity->ic ? "IČO $entity->ic" : null, $entity->email])),
 				],
@@ -101,7 +101,7 @@ final class SearchEndpoint extends BaseEndpoint
 				$terms,
 				$limit,
 				\Eshop\DB\Order::class,
-				static fn ($entity): array => [
+				static fn (\Eshop\DB\Order $entity): array => [
 					'label' => $entity->code,
 					'detail' => 'objednávka z ' . Strings::substring((string) $entity->createdTs, 0, 10),
 				],
@@ -115,7 +115,7 @@ final class SearchEndpoint extends BaseEndpoint
 				$terms,
 				$limit,
 				\Eshop\DB\Invoice::class,
-				static fn ($entity): array => [
+				static fn (\Eshop\DB\Invoice $entity): array => [
 					'label' => (string) $entity->code,
 					'detail' => 'faktura z ' . (string) $entity->exposed,
 				],
@@ -126,11 +126,12 @@ final class SearchEndpoint extends BaseEndpoint
 	}
 
 	/**
+	 * @template T of \StORM\Entity
 	 * @param array<string> $columns
 	 * @param array<string> $terms
-	 * @param class-string<\StORM\Entity> $entityClass
-	 * @param callable(\StORM\Entity): array<string, string|null> $describe
-	 * @param callable(\StORM\Collection<\StORM\Entity>): \StORM\Collection<\StORM\Entity> $prepare
+	 * @param class-string<T> $entityClass
+	 * @param callable(T): array<string, string|null> $describe
+	 * @param callable(\StORM\Collection<T>): \StORM\Collection<T> $prepare
 	 * @return array<array<string, mixed>>
 	 */
 	private function collect(string $type, array $columns, array $terms, int $limit, string $entityClass, callable $describe, callable $prepare): array
