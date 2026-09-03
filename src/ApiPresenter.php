@@ -29,6 +29,11 @@ final class ApiPresenter extends Presenter
 		$this->respond('openapi.json');
 	}
 
+	public function actionIndex(): void
+	{
+		$this->respond('');
+	}
+
 	private function respond(string $path): void
 	{
 		$this->sendResponse(new JsonApiResponse($this->api->handle($this->getHttpRequest(), $path)));

@@ -108,6 +108,10 @@ check('PUT je 405', $status === 405, "dostal jsem $status");
 check('neznámý endpoint je 404', $status === 404, "dostal jsem $status");
 
 echo "\nhealth\n";
+[$status, $index, , $contentType] = request($baseUrl);
+check('kořen API odpovídá JSONem, ne stránkou shopu', $status === 200 && \str_contains($contentType, 'application/json'), $contentType);
+check('kořen API ukazuje na dokumentaci', isset($index['documentation'], $index['health'], $index['capabilities']));
+
 [$status, $health] = request("$baseUrl/v1/meta/health");
 check('health jde i bez tokenu', $status === 200 && ($health['status'] ?? null) === 'ok');
 check('health bez tokenu neprozradí shop', !isset($health['shop']) && !isset($health['eshopVersion']));

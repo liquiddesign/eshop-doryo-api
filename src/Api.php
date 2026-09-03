@@ -66,9 +66,10 @@ final class Api
 	 */
 	private function route(IRequest $request, string $path, array $params): Response
 	{
-		// Health je schválně i bez tokenu, aby se dal monitorovat; bez autentizace ale
-		// neřekne nic o shopu — jen že služba běží.
-		if ($path === 'v1/meta/health' || $path === 'openapi.json') {
+		// Health a rozcestník jdou schválně i bez tokenu — monitoring i člověk, který si
+		// adresu otevře v prohlížeči, mají dostat odpověď API. Bez autentizace ale neřeknou
+		// nic o shopu, jen že služba běží.
+		if ($path === '' || $path === 'v1/meta/health' || $path === 'openapi.json') {
 			try {
 				$this->authenticator->authenticate($request);
 				$authenticated = true;
@@ -88,6 +89,10 @@ final class Api
 			return new Response($this->specification->build($this->baseUrl($request)));
 		}
 
+		if ($path === '') {
+			return $this->index($request);
+		}
+
 		[$handler, $routeParams] = $this->router->match($path);
 
 		if ($path === 'v1/meta/health' && !$authenticated) {
@@ -95,6 +100,28 @@ final class Api
 		}
 
 		return $handler($routeParams, new Query($params, $this->config));
+	}
+
+	/**
+	 * Rozcestník na kořeni API.
+	 *
+	 * Kdo si adresu API otevře v prohlížeči nebo ji zkusí zavolat bez cesty, ať dostane
+	 * odpověď API, ne stránkovou 404 shopu — a rovnou odkaz na to, co si má přečíst dřív,
+	 * než začne volat: popis endpointů a přehled toho, co tenhle shop vede.
+	 */
+	private function index(IRequest $request): Response
+	{
+		$baseUrl = $this->baseUrl($request);
+
+		return new Response([
+			'service' => 'eshop-doryo-api',
+			'version' => Config::VERSION,
+			'documentation' => "$baseUrl/openapi.json",
+			'health' => "$baseUrl/v1/meta/health",
+			'capabilities' => "$baseUrl/v1/meta/capabilities",
+			'hint' => 'Endpointy jsou pod /v1 a chtějí hlavičku Authorization: Bearer <token>. '
+				. 'API je jen ke čtení, jiná metoda než GET vrací 405.',
+		]);
 	}
 
 	private function baseUrl(IRequest $request): string

@@ -143,6 +143,7 @@ final class DoryoApiDI extends CompilerExtension
 		$prefix = Strings::trim($config->prefix, '/');
 		$builder->addDefinition($this->prefix('routes'))
 			->setFactory(RouteList::class)
+			->addSetup('addRoute', [$prefix, self::PRESENTER_MODULE . ':Api:index'])
 			->addSetup('addRoute', ["$prefix/openapi.json", self::PRESENTER_MODULE . ':Api:openapi'])
 			->addSetup('addRoute', ["$prefix/v1/<path .+>", self::PRESENTER_MODULE . ':Api:default'])
 			->setAutowired(false);
