@@ -50,7 +50,7 @@ final class MetaEndpoint extends BaseEndpoint
 		return new Response([
 			'status' => 'ok',
 			'service' => 'eshop-doryo-api',
-			'version' => Config::VERSION,
+			'version' => Config::version(),
 			'shop' => [
 				'name' => $this->config->getShopName(),
 				'url' => $this->config->getShopUrl(),

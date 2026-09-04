@@ -115,7 +115,7 @@ final class Api
 
 		return new Response([
 			'service' => 'eshop-doryo-api',
-			'version' => Config::VERSION,
+			'version' => Config::version(),
 			'documentation' => "$baseUrl/openapi.json",
 			'health' => "$baseUrl/v1/meta/health",
 			'capabilities' => "$baseUrl/v1/meta/capabilities",

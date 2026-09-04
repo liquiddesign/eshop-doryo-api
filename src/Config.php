@@ -14,8 +14,11 @@ use Nette\Utils\Strings;
  */
 final class Config
 {
-	/** Verze kontraktu API (vrací ji /meta/health). */
-	public const VERSION = '1.0.0';
+	/**
+	 * Verze balíku, když se nedá zjistit z Composeru (balík nasazený mimo composer install).
+	 * Skutečná verze se bere z tagu přes {@see version()}, aby s vydáním nedriftovala.
+	 */
+	public const VERSION = '1.0.1';
 
 	/** Normalizované stavy objednávek, které API vrací v poli `status`. */
 	public const ORDER_STATUSES = ['new', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
@@ -190,6 +193,23 @@ final class Config
 	 * Verze balíku liquiddesign/eshop, nad kterým API běží. Doryo si podle ní umí ohlídat,
 	 * že mluví s tím, co čeká.
 	 */
+	/**
+	 * Verze balíku (vrací ji /meta/health a kořen API) — z nainstalovaného tagu, ne z konstanty,
+	 * kterou by bylo potřeba při každém vydání ručně přepsat.
+	 */
+	public static function version(): string
+	{
+		if (!\class_exists(\Composer\InstalledVersions::class)) {
+			return self::VERSION;
+		}
+
+		try {
+			return \ltrim(\Composer\InstalledVersions::getPrettyVersion('liquiddesign/eshop-doryo-api') ?? self::VERSION, 'v');
+		} catch (\Throwable) {
+			return self::VERSION;
+		}
+	}
+
 	public function getEshopVersion(): ?string
 	{
 		if (!\class_exists(\Composer\InstalledVersions::class)) {
