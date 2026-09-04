@@ -348,21 +348,6 @@ final class MetaEndpoint extends BaseEndpoint
 		];
 	}
 
-	private function hasAnyRow(string $table, ?string $where = null): bool
-	{
-		try {
-			$collection = $this->connection->rows(['t' => $table], ['one' => '1'])->setTake(1);
-
-			if ($where !== null) {
-				$collection->where("t.$where");
-			}
-
-			return $collection->firstValue('one') !== false;
-		} catch (\Throwable) {
-			return false;
-		}
-	}
-
 	private function lastTimestamp(string $table, string $column): ?string
 	{
 		try {

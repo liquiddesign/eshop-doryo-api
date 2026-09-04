@@ -422,6 +422,18 @@ if (($orders['items'] ?? []) === []) {
 [$status, $windowed] = request("$baseUrl/v1/orders?limit=1&createdFrom=2020-01-01&createdTo=2020-12-31", $token);
 check('zadané okno se v odpovědi neopakuje', $status === 200 && !isset($windowed['window'], $windowed['note']));
 
+// Doména, kterou shop nevede, se nesmí tvářit jako „zatím nic". Platí jen tam, kde
+// capabilities hlásí reviews: false — jinde je prázdno legitimní odpověď.
+[$status, $capabilities] = request("$baseUrl/v1/meta/capabilities", $token);
+
+if (($capabilities['features']['reviews']['available'] ?? null) === false && isset($product['id'])) {
+	[$status, $reviews] = request("$baseUrl/v1/products/" . \rawurlencode($product['id']) . '/reviews', $token);
+	check('recenze u shopu, který je nevede, to řeknou', $status === 200 && isset($reviews['note']));
+
+	[$status, $reviewReport] = request("$baseUrl/v1/reports/reviews", $token);
+	check('report recenzí u shopu, který je nevede, to řekne', $status === 200 && isset($reviewReport['note']));
+}
+
 echo "\nopenapi\n";
 [$status] = request("$baseUrl/openapi.json");
 check('openapi bez tokenu je 401', $status === 401, "dostal jsem $status");

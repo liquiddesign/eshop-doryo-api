@@ -221,7 +221,7 @@ final class ProductsEndpoint extends BaseEndpoint
 			];
 		}
 
-		return Response::list($items, null);
+		return $this->withReviewsNote(Response::list($items, null));
 	}
 
 	/**

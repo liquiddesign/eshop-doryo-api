@@ -9,6 +9,7 @@ use DoryoApi\Config;
 use DoryoApi\Http\ApiException;
 use DoryoApi\Http\Cursor;
 use DoryoApi\Http\Query;
+use DoryoApi\Http\Response;
 use DoryoApi\Support\Sql;
 use StORM\Collection;
 use StORM\DIConnection;
@@ -82,6 +83,48 @@ abstract class BaseEndpoint implements Endpoint
 		}
 
 		$collection->where($condition[0], $condition[1]);
+	}
+
+	/**
+	 * Má ta tabulka vůbec nějaký použitelný řádek? Levné `LIMIT 1`, ne COUNT.
+	 *
+	 * Slouží k rozlišení „tenhle záznam nic nemá" od „tuhle doménu shop nevede" — což je
+	 * z prázdného seznamu jinak nepoznat. Chybějící tabulka (starší verze eshopu) není
+	 * chyba, jen `false`.
+	 */
+	protected function hasAnyRow(string $table, ?string $where = null): bool
+	{
+		try {
+			$collection = $this->connection->rows(['t' => $table], ['one' => '1'])->setTake(1);
+
+			if ($where !== null) {
+				$collection->where("t.$where");
+			}
+
+			return $collection->firstValue('one') !== false;
+		} catch (\Throwable) {
+			return false;
+		}
+	}
+
+	/**
+	 * Prázdno u recenzí znamená u jednoho shopu „nikdo to nehodnotil" a u druhého „hodnocení
+	 * se tu vůbec nevedou". Druhý případ se dá poznat jen jedním levným dotazem, tak ať se
+	 * to řekne rovnou — ať to volající nevydává za nulové hodnocení.
+	 */
+	protected function withReviewsNote(Response $response): Response
+	{
+		$body = $response->getBody();
+
+		if ($body['items'] !== [] || $this->hasAnyRow('eshop_review', 'score IS NOT NULL')) {
+			return $response;
+		}
+
+		return $response->withExtra([
+			'note' => 'Tenhle shop hodnocení nevede — v celé databázi není ani jedno vyplněné skóre '
+				. '(řádek vzniká i jen odesláním žádosti o hodnocení). Prázdný výsledek proto neznamená, '
+				. 'že produkt hodnocení nemá; viz /v1/meta/capabilities.',
+		]);
 	}
 
 	/**
