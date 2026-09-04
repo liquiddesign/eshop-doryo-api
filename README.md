@@ -31,12 +31,29 @@ projekt: **pustit požadavek přes svou bránu na front**. Projekty postavené n
 mají v `config/environments.neon` seznam `frontAccess.exclude` — přidej do něj `DoryoApi:Api`,
 jinak brána odmítne požadavek dřív, než se dostane na token.
 
+Dvě věci, na které se naráží na klasickém serveru:
+
+- **Adresa shopu.** `shopUrl` bývá v repu s produkční adresou; testovací server ji přepíše env
+  proměnnou `DORYO_API_SHOP_URL` (má přednost před configem), třeba `SetEnv` ve vhostu. Bez toho
+  rozcestník i odkazy na produkty ukazují na produkci, i když data jdou z testu.
+- **Apache s PHP přes FastCGI/CGI** hlavičku `Authorization` do PHP nepředává a API pak vrací
+  `401 Chybí hlavička Authorization`, i když je token správně. Do vhostu dej `CGIPassAuth On`
+  (Apache ≥ 2.4.13), nebo do `.htaccess`:
+
+  ```apache
+  RewriteCond %{HTTP:Authorization} .
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+  ```
+
+  Balík si hlavičku z `HTTP_AUTHORIZATION` i `REDIRECT_HTTP_AUTHORIZATION` přečte sám.
+
 ## Konfigurace
 
 | klíč | výchozí | k čemu |
 | --- | --- | --- |
 | `prefix` | `doryo-api` | prefix cesty; routy se registrují podle něj |
 | `token` | `null` | Bearer token; `null` = z env `DORYO_API_TOKEN` |
+| `shopUrl` | `null` | veřejná adresa shopu v odkazech; env `DORYO_API_SHOP_URL` ji přepíše |
 | `allowIps` | `[]` | whitelist IP/CIDR; prázdné = stačí platný token |
 | `currency` | `CZK` | měna, ve které se vydávají částky bez vazby na ceník |
 | `defaultPricelists` | `[]` | ceníky pro veřejnou cenu; prázdné = ceníky výchozí skupiny zákazníků |
