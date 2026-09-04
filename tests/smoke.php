@@ -233,25 +233,36 @@ if ($productCode !== null) {
 	check('detail produktu podle kódu', $status === 200 && ($byCode['code'] ?? null) === $productCode);
 }
 
-[$status, $pricelists] = request("$baseUrl/v1/pricelists?limit=5", $token);
+[$status, $pricelists] = request("$baseUrl/v1/pricelists?limit=200", $token);
 check('seznam ceníků', $status === 200 && \is_array($pricelists['items'] ?? null));
 
 [$status] = request("$baseUrl/v1/prices", $token);
 check('ceny bez ceníku jsou 400', $status === 400, "dostal jsem $status");
 
-$pricelistCode = null;
+// Schválně ten NEJMENŠÍ ceník, který podle seznamu produkty má. Velké ceníky pokrývají
+// skoro celý katalog, takže projdou i tehdy, když se stránkuje přes produkty místo přes
+// ceník; malý ceník takovou chybu odhalí — vrátil by prázdnou první stránku.
+$pricelist = null;
 
 foreach ($pricelists['items'] ?? [] as $item) {
-	if ($item['code'] !== null) {
-		$pricelistCode = $item['code'];
+	if (($item['products'] ?? 0) < 1) {
+		continue;
+	}
 
-		break;
+	if ($pricelist === null || $item['products'] < $pricelist['products']) {
+		$pricelist = $item;
 	}
 }
 
-if ($pricelistCode !== null) {
-	[$status, $prices] = request("$baseUrl/v1/prices?pricelist=" . \rawurlencode($pricelistCode) . '&limit=3', $token);
+if ($pricelist !== null) {
+	$key = $pricelist['code'] ?? $pricelist['id'];
+	[$status, $prices] = request("$baseUrl/v1/prices?pricelist=" . \rawurlencode($key) . '&limit=3', $token);
 	check('ceny z ceníku', $status === 200 && \is_array($prices['items'] ?? null));
+	check(
+		'ceník s produkty vrací ceny hned na první stránce',
+		isset($prices['items'][0]),
+		"ceník {$pricelist['name']} hlásí {$pricelist['products']} produktů, ale /v1/prices vrátil prázdno",
+	);
 	check('cena je řetězec s měnou', !isset($prices['items'][0]) || isMoney($prices['items'][0]['price']));
 }
 

@@ -10,6 +10,7 @@ use DoryoApi\Http\Response;
 use DoryoApi\Support\Money;
 use DoryoApi\Support\PriceFormula;
 use DoryoApi\Support\ProductCode;
+use DoryoApi\Support\Sql;
 use Eshop\DB\Customer;
 
 /**
@@ -212,6 +213,15 @@ final class PricesEndpoint extends BaseEndpoint
 		$suffix = $this->connection->getMutationSuffix();
 		$collection = $this->repository(\Eshop\DB\Product::class)->many()->where('this.deletedTs IS NULL');
 
+		// Stránkuje se přes produkty, ale ceny se berou z vyjmenovaných ceníků — bez tohohle
+		// omezení by se listovalo celým katalogem a ceník se 139 položkami by na první
+		// stránce vrátil prázdno, protože by se do ní žádná z nich netrefila. Vypadalo by to
+		// jako prázdný ceník; ve skutečnosti byly ty ceny až na jedenácté stránce.
+		$collection->where(
+			'this.uuid IN (SELECT dp.fk_product FROM eshop_price dp WHERE dp.fk_pricelist IN ('
+				. Sql::inList($this->connection, $pricelists) . ') AND dp.hidden = 0)',
+		);
+
 		$codes = $query->strings('codes');
 
 		if ($code = $query->string('code')) {
@@ -322,8 +332,13 @@ final class PricesEndpoint extends BaseEndpoint
 
 		$map = [];
 
+		// Počítá se to samé, co pak vrátí /v1/prices — tedy bez skrytých cen a bez smazaných
+		// produktů. Jinak by ceník sliboval víc položek, než se z něj dá vytáhnout.
 		$prices = $this->connection->rows(['p' => 'eshop_price'], ['id' => 'p.fk_pricelist', 'cnt' => 'COUNT(*)'])
+			->join(['prod' => 'eshop_product'], 'prod.uuid = p.fk_product', [], 'INNER')
 			->where('p.fk_pricelist', $ids)
+			->where('p.hidden', false)
+			->where('prod.deletedTs IS NULL')
 			->setGroupBy(['p.fk_pricelist']);
 
 		foreach ($prices as $row) {
