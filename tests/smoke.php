@@ -385,6 +385,43 @@ foreach (['customers?limit=20', 'orders?limit=20', 'invoices?limit=20', 'product
 	check("$path neobsahuje interní pole", $found === null, "našel jsem $found");
 }
 
+echo "\nsrozumitelnost pro volajícího\n";
+
+// Překlep v názvu parametru nesmí projít tiše — jinak volající dostane nefiltrovaná data
+// a bude je považovat za odfiltrovaná.
+[$status, $problem] = request("$baseUrl/v1/orders?limit=1&zakaznik=nesmysl", $token);
+check('neznámý parametr je 400', $status === 400, "dostal jsem $status");
+check(
+	'chyba u neznámého parametru vyjmenuje, co endpoint zná',
+	\str_contains((string) ($problem['detail'] ?? ''), 'zná:'),
+	(string) ($problem['detail'] ?? ''),
+);
+
+[$status] = request("$baseUrl/v1/orders?limit=1&Limit=2", $token);
+check('překlep ve velikosti písmen je 400', $status === 400, "dostal jsem $status");
+
+[$status] = request("$baseUrl/v1/orders?limit=1", $token);
+check('správné parametry projdou', $status === 200, "dostal jsem $status");
+
+// Výchozí okno se musí přiznat. Bez toho nejde rozeznat „nic tam není" od
+// „je to starší, než kam výchozí okno sahá".
+[$status, $orders] = request("$baseUrl/v1/orders?limit=1", $token);
+check('výchozí okno je vidět v odpovědi', isset($orders['window']['from'], $orders['window']['to']));
+check('výchozí okno je označené jako výchozí', ($orders['window']['defaulted'] ?? null) === true);
+check(
+	'okno pojmenuje parametry, kterými se přebije',
+	($orders['window']['params'] ?? []) === ['createdFrom', 'createdTo'],
+	\implode(',', $orders['window']['params'] ?? []),
+);
+
+if (($orders['items'] ?? []) === []) {
+	check('prázdný výsledek ve výchozím okně vysvětlí, proč je prázdný', isset($orders['note']));
+}
+
+// Zadané okno se nekomentuje — volající ho zná, poznámka by jen ujídala kontext.
+[$status, $windowed] = request("$baseUrl/v1/orders?limit=1&createdFrom=2020-01-01&createdTo=2020-12-31", $token);
+check('zadané okno se v odpovědi neopakuje', $status === 200 && !isset($windowed['window'], $windowed['note']));
+
 echo "\nopenapi\n";
 [$status] = request("$baseUrl/openapi.json");
 check('openapi bez tokenu je 401', $status === 401, "dostal jsem $status");

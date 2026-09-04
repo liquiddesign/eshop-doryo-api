@@ -31,6 +31,16 @@ final class Response
 		]);
 	}
 
+	/**
+	 * Tělo obohacené o kontext, který doplňuje Api (použité okno, poznámka k prázdnému
+	 * výsledku). Klíče odpovědi se nepřepisují — kontext jen přibývá.
+	 * @param array<mixed> $extra
+	 */
+	public function withExtra(array $extra): self
+	{
+		return new self($this->body + $extra, $this->status, $this->contentType);
+	}
+
 	public static function problem(ApiException $exception): self
 	{
 		return new self($exception->toProblem(), $exception->getStatus(), 'application/problem+json');

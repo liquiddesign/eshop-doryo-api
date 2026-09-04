@@ -86,6 +86,37 @@ Zbytek je na `/{prefix}/v1/…`, seznamy v obálce `{ items, nextCursor, hasMore
   expedice, hodnocení, importy, zdraví katalogu, doklady bez protějšku
 - **orientace** — `meta/capabilities`, `meta/codebooks`, `categories`, `suppliers`, `search`
 
+## Aby odpověď nešla přečíst špatně
+
+Odpověď čte model, ne člověk, takže dvě věci nejdou nechat na domýšlení:
+
+**Prázdný seznam řekne, jestli za tím není jen výchozí okno.** Seznamy a reporty bez zadaného
+rozsahu berou posledních `defaultWindowMonths` měsíců. Když se okno vzalo z výchozí hodnoty,
+odpověď to přizná v `window` — a je-li výsledek prázdný, přidá i `note`:
+
+```json
+{
+  "items": [],
+  "nextCursor": null,
+  "hasMore": false,
+  "window": { "from": "2026-03-04", "to": "2026-09-04", "params": ["createdFrom", "createdTo"], "defaulted": true },
+  "note": "Prázdné nemusí znamenat, že záznamy nejsou: bez createdFrom a createdTo se bere posledních 6 měsíců…"
+}
+```
+
+Bez toho nejde rozeznat „zákazník nic neodebral" od „data jsou starší, než kam výchozí okno
+sahá" — obojí je `items: []`. Když si rozsah zadáš sám, `window` ani `note` v odpovědi nejsou;
+víš, na co ses ptal, a nemá smysl tím ujídat kontext.
+
+**Překlep v názvu parametru je `400`, ne ticho.** `?zakaznik=…` nebo `?CreatedFrom=…` by se
+jinak zahodily a vrátila by se nefiltrovaná data, která vypadají jako odfiltrovaná. Chyba
+vyjmenuje, co daný endpoint zná:
+
+```
+Neznámý parametr zakaznik. Tenhle endpoint zná: createdFrom, createdTo, cursor, customerId,
+limit, q, status… Úplný popis je v /openapi.json.
+```
+
 ## Nejdřív se zeptej, co shop vede
 
 `GET /v1/meta/capabilities` řekne u každé domény, jestli ji shop používá, kolik má záznamů a kdy

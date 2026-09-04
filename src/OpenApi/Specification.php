@@ -942,6 +942,22 @@ final class Specification
 				'items' => ['type' => 'array', 'items' => ['$ref' => "#/components/schemas/$item"]],
 				'nextCursor' => ['type' => 'string', 'nullable' => true, 'description' => 'Kurzor další stránky, nebo null.'],
 				'hasMore' => ['type' => 'boolean'],
+				'window' => [
+					'type' => 'object',
+					'description' => 'Jen když se časové okno vzalo z výchozí hodnoty. Říká, jaký rozsah se '
+						. 'reálně použil a kterými parametry se přebije.',
+					'properties' => [
+						'from' => ['type' => 'string', 'format' => 'date'],
+						'to' => ['type' => 'string', 'format' => 'date'],
+						'params' => ['type' => 'array', 'items' => ['type' => 'string']],
+						'defaulted' => ['type' => 'boolean'],
+					],
+				],
+				'note' => [
+					'type' => 'string',
+					'description' => 'Jen u prázdného seznamu ve výchozím okně: upozornění, že prázdný '
+						. 'výsledek může být tím oknem, ne tím, že záznamy neexistují.',
+				],
 			],
 		];
 	}

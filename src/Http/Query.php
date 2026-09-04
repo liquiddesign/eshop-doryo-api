@@ -15,6 +15,15 @@ use Nette\Utils\Strings;
 final class Query
 {
 	/**
+	 * Parametry, na které se obsluha zeptala. Z rozdílu proti dotazu se pozná překlep.
+	 * @var array<string, true>
+	 */
+	private array $known = [];
+
+	/** @var array{from: string, to: string, params: array{0: string, 1: string}, defaulted: bool}|null */
+	private ?array $appliedWindow = null;
+
+	/**
 	 * @param array<string, mixed> $params
 	 */
 	public function __construct(private array $params, private Config $config)
@@ -23,7 +32,42 @@ final class Query
 
 	public function has(string $name): bool
 	{
+		// každé čtení parametru jde přes tuhle metodu, takže `known` je zároveň seznam
+		// toho, co daný endpoint umí — nemusí se udržovat zvlášť
+		$this->known[$name] = true;
+
 		return isset($this->params[$name]) && $this->params[$name] !== '';
+	}
+
+	/**
+	 * Parametry, které v dotazu jsou, ale obsluha se na ně nezeptala — typicky překlep
+	 * (`?zakaznik=`, `?CreatedFrom=`).
+	 * @return array<string>
+	 */
+	public function getUnknownParams(): array
+	{
+		return \array_values(\array_diff(\array_keys($this->params), \array_keys($this->known)));
+	}
+
+	/**
+	 * Co tenhle endpoint zná — do chybové hlášky, ať se volající umí opravit sám.
+	 * @return array<string>
+	 */
+	public function getKnownParams(): array
+	{
+		$names = \array_keys($this->known);
+		\sort($names);
+
+		return $names;
+	}
+
+	/**
+	 * Okno, které se na dotaz reálně použilo, a jestli vzniklo z výchozí hodnoty.
+	 * @return array{from: string, to: string, params: array{0: string, 1: string}, defaulted: bool}|null
+	 */
+	public function getAppliedWindow(): ?array
+	{
+		return $this->appliedWindow;
 	}
 
 	public function string(string $name, ?string $default = null): ?string
@@ -157,6 +201,7 @@ final class Query
 	{
 		$from = $this->date($fromParam);
 		$to = $this->date($toParam);
+		$givenFrom = $from;
 
 		if ($required && ($from === null || $to === null)) {
 			throw ApiException::badRequest("Parametry $fromParam a $toParam jsou povinné.");
@@ -175,6 +220,13 @@ final class Query
 		if ($from < $maxFrom) {
 			throw ApiException::badRequest(\sprintf('Rozsah %s–%s smí být nejvýše %d měsíců.', $fromParam, $toParam, $this->config->getMaxWindowMonths()));
 		}
+
+		$this->appliedWindow = [
+			'from' => $from,
+			'to' => $to,
+			'params' => [$fromParam, $toParam],
+			'defaulted' => $givenFrom === null,
+		];
 
 		return [$from, $to];
 	}

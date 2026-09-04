@@ -99,7 +99,81 @@ final class Api
 			$routeParams['authenticated'] = '0';
 		}
 
-		return $handler($routeParams, new Query($params, $this->config));
+		$query = new Query($params, $this->config);
+		$response = $handler($routeParams, $query);
+
+		$this->assertKnownParams($path, $query);
+
+		return $this->annotate($response, $query);
+	}
+
+	/**
+	 * Překlep v názvu parametru končí chybou, ne tichým ignorováním.
+	 *
+	 * Kdo se splete (`?zakaznik=`, `?CreatedFrom=`), dostal by jinak nefiltrovaná data
+	 * a odpovídal by z nich, jako by filtr platil. To je horší než 400, ze kterého se
+	 * volající umí opravit — a je to i to, co slibuje Query: „API nikdy netipuje".
+	 */
+	private function assertKnownParams(string $path, Query $query): void
+	{
+		// health si volá i monitoring, kterému se do URL běžně přidávají cizí parametry
+		if ($path === 'v1/meta/health') {
+			return;
+		}
+
+		$unknown = $query->getUnknownParams();
+
+		if (!$unknown) {
+			return;
+		}
+
+		throw ApiException::badRequest(\sprintf(
+			'Neznámý parametr %s. Tenhle endpoint zná: %s. Úplný popis je v /openapi.json.',
+			\implode(', ', $unknown),
+			\implode(', ', $query->getKnownParams()),
+		));
+	}
+
+	/**
+	 * Když se okno vzalo z výchozí hodnoty, řekne se to v odpovědi — a u prázdného seznamu
+	 * i to, že za tím může být právě ono.
+	 *
+	 * Bez toho nejde rozlišit „zákazník nic neodebral" od „data jsou starší, než kam
+	 * výchozí okno sahá". Obojí vypadá jako `items: []` a druhý případ svádí k tomu
+	 * odpovědět, že záznamy neexistují.
+	 */
+	private function annotate(Response $response, Query $query): Response
+	{
+		$window = $query->getAppliedWindow();
+
+		if ($window === null || !$window['defaulted']) {
+			return $response;
+		}
+
+		$extra = [
+			'window' => [
+				'from' => $window['from'],
+				'to' => $window['to'],
+				'params' => $window['params'],
+				'defaulted' => true,
+			],
+		];
+
+		$body = $response->getBody();
+
+		if (isset($body['items']) && \is_array($body['items']) && !$body['items']) {
+			$extra['note'] = \sprintf(
+				'Prázdné nemusí znamenat, že záznamy nejsou: bez %s a %s se bere posledních %d měsíců, '
+					. 'tedy %s až %s. Starší záznamy vrátí až dotaz s vlastním rozsahem.',
+				$window['params'][0],
+				$window['params'][1],
+				$this->config->getDefaultWindowMonths(),
+				$window['from'],
+				$window['to'],
+			);
+		}
+
+		return $response->withExtra($extra);
 	}
 
 	/**
