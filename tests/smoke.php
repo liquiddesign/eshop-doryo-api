@@ -118,6 +118,8 @@ check('health bez tokenu neprozradí shop', !isset($health['shop']) && !isset($h
 
 [$status, $health] = request("$baseUrl/v1/meta/health", $token);
 check('health s tokenem má verzi a shop', $status === 200 && isset($health['version'], $health['shop']['currency']));
+$languages = $health['shop']['languages'] ?? [];
+check('health nese každý jazyk jen jednou', \is_array($languages) && $languages !== [] && \count($languages) === \count(\array_unique($languages)), \implode(',', $languages));
 
 echo "\nobálka a stránkování\n";
 

@@ -55,21 +55,23 @@ final class DoryoApiDI extends CompilerExtension
 			'shopName' => Expect::string()->nullable(),
 			'shopUrl' => Expect::string()->nullable(),
 			'currency' => Expect::string('CZK'),
-			'languages' => Expect::listOf('string')->default(['cs']),
+			'languages' => Expect::listOf('string')->default(['cs'])->mergeDefaults(false),
 			'timezone' => Expect::string()->nullable(),
 			'defaultPricelists' => Expect::listOf('string'),
 			'defaultCustomerGroup' => Expect::string()->nullable(),
+			// mergeDefaults(false): Nette Schema jinak seznamy z configu k výchozím PŘIDÁVÁ, nenahrazuje je —
+			// `languages: [cs]` by vyšlo jako [cs, cs] a shop s vlastními stavy by měl vedle nich i ty výchozí
 			'orderStates' => Expect::arrayOf(Expect::listOf('string'))->default([
 				'new' => ['open'],
 				'processing' => ['received'],
 				'delivered' => ['finished'],
 				'cancelled' => ['canceled'],
-			]),
+			])->mergeDefaults(false),
 			'invoicePaymentTracked' => Expect::bool(true),
 			// ceny konkrétního zákazníka jsou vědomá výjimka — ve výchozím stavu vypnuté
 			'customerPrices' => Expect::bool(false),
 			'userfilesDir' => Expect::string()->nullable(),
-			'imageSizes' => Expect::listOf('string')->default(['origin', 'detail', 'thumb']),
+			'imageSizes' => Expect::listOf('string')->default(['origin', 'detail', 'thumb'])->mergeDefaults(false),
 			'logDir' => Expect::string()->nullable(),
 			// vlastní pole shopu: seznam služeb implementujících DoryoApi\Extension\DoryoApiExtension
 			'extensions' => Expect::listOf(Expect::anyOf(Expect::string(), Expect::type(Statement::class))),
