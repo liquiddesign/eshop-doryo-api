@@ -352,8 +352,10 @@ if (isset($product['id'])) {
 [$status] = request("$baseUrl/v1/products?attribute=nesmysl&limit=1", $token);
 check('parametr bez dvojtečky je 400', $status === 400, "dostal jsem $status");
 
-foreach (['fulfillment', 'reviews', 'imports', 'catalog-health'] as $report) {
-	[$status, $data] = request("$baseUrl/v1/reports/$report?limit=5", $token);
+// catalog-health nestránkuje (vrací pevný seznam kontrol) a od 1.1 je neznámý parametr 400,
+// takže `limit` smí jen tam, kde se stránkuje
+foreach (['fulfillment' => '?limit=5', 'reviews' => '?limit=5', 'imports' => '?limit=5', 'catalog-health' => ''] as $report => $params) {
+	[$status, $data] = request("$baseUrl/v1/reports/$report$params", $token);
 	check("report $report", $status === 200 && \is_array($data['items'] ?? null), "status $status");
 }
 
@@ -366,7 +368,7 @@ check(
 [$status, $unlinked] = request("$baseUrl/v1/reports/unlinked?limit=3", $token);
 check('doklady bez protějšku', $status === 200 && \is_array($unlinked['ordersWithoutInvoice'] ?? null) && \is_array($unlinked['invoicesWithoutOrder'] ?? null));
 
-[$status, $carts] = request("$baseUrl/v1/reports/abandoned-carts?limit=3", $token);
+[$status, $carts] = request("$baseUrl/v1/reports/abandoned-carts", $token);
 check('opuštěné košíky', $status === 200 && \is_int($carts['carts'] ?? null));
 check('opuštěné košíky bez withItems neplatí za hodnotu', \array_key_exists('value', $carts) && $carts['value'] === null && isset($carts['hint']));
 
