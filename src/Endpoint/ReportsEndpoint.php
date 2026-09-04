@@ -58,10 +58,18 @@ final class ReportsEndpoint extends BaseEndpoint
 			throw ApiException::badRequest('Parametr groupBy musí být jeden z: ' . \implode(', ', self::GROUP_BY) . '.');
 		}
 
+		// Volitelné zúžení na objednávky dané velikosti („po měsících, jen objednávky nad deset
+		// položek"). Bez toho by se to muselo poskládat z detailu každé objednávky zvlášť.
+		[$minItems, $maxItems] = $this->itemCountRange($query);
+		// nákupy okna se tahají jen kvůli tomuhle filtru — bez něj by to byl dotaz navíc pro nic
+		$purchases = $minItems === null && $maxItems === null
+			? null
+			: $this->purchasesByItemCount($this->purchasesInWindow($from, $to), $minItems, $maxItems);
+
 		$items = match ($groupBy) {
-			'category' => $this->salesByItems($from, $to, 'category'),
-			'producer' => $this->salesByItems($from, $to, 'producer'),
-			default => $this->salesByPeriod($groupBy, $from, $to),
+			'category' => $this->salesByItems($from, $to, 'category', $purchases),
+			'producer' => $this->salesByItems($from, $to, 'producer', $purchases),
+			default => $this->salesByPeriod($groupBy, $from, $to, $purchases),
 		};
 
 		return Response::list($items, null);
@@ -752,10 +760,15 @@ final class ReportsEndpoint extends BaseEndpoint
 	}
 
 	/**
+	 * @param array<string>|null $purchases
 	 * @return array<array<string, mixed>>
 	 */
-	private function salesByPeriod(string $groupBy, string $from, string $to): array
+	private function salesByPeriod(string $groupBy, string $from, string $to, ?array $purchases = null): array
 	{
+		if ($purchases === []) {
+			return [];
+		}
+
 		$key = match ($groupBy) {
 			'month' => "DATE_FORMAT(o.createdTs, '%Y-%m')",
 			'week' => "DATE_FORMAT(o.createdTs, '%x-W%v')",
@@ -786,6 +799,10 @@ final class ReportsEndpoint extends BaseEndpoint
 			$rows->join(['cu' => 'eshop_customer'], 'cu.uuid = p.fk_customer');
 		}
 
+		if ($purchases !== null) {
+			$rows->where('o.fk_purchase', $purchases);
+		}
+
 		$items = [];
 
 		foreach ($rows as $row) {
@@ -805,12 +822,13 @@ final class ReportsEndpoint extends BaseEndpoint
 	 * objednávek — dopravu a platbu do kategorie zařadit nejde. Produkt se počítá do jedné
 	 * kategorie (té s nejnižším UUID), aby se stejná položka nesečetla vícekrát; `orders` je
 	 * počet různých objednávek, ve kterých se kategorie objevila.
+	 * @param array<string>|null $purchases
 	 * @return array<array<string, mixed>>
 	 */
-	private function salesByItems(string $from, string $to, string $dimension): array
+	private function salesByItems(string $from, string $to, string $dimension, ?array $purchases = null): array
 	{
 		$currency = $this->config->getCurrency();
-		$rows = $this->loadItemSales($from, $to);
+		$rows = $this->loadItemSales($from, $to, $purchases);
 
 		if (!$rows) {
 			return [];
@@ -855,11 +873,12 @@ final class ReportsEndpoint extends BaseEndpoint
 
 	/**
 	 * Prodeje po položkách za okno — společný základ reportů, které jdou pod úroveň objednávky.
+	 * @param array<string>|null $purchases
 	 * @return array<object>
 	 */
-	private function loadItemSales(string $from, string $to): array
+	private function loadItemSales(string $from, string $to, ?array $purchases = null): array
 	{
-		$purchaseIds = $this->purchasesInWindow($from, $to);
+		$purchaseIds = $purchases ?? $this->purchasesInWindow($from, $to);
 
 		if (!$purchaseIds) {
 			return [];

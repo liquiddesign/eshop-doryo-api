@@ -149,6 +149,19 @@ final class OrdersEndpoint extends BaseEndpoint
 			$collection->where('this.uuid NOT IN (SELECT nxn.fk_order FROM eshop_invoice_nxn_eshop_order nxn)');
 		}
 
+		[$minItems, $maxItems] = $this->itemCountRange($query);
+
+		if ($minItems !== null || $maxItems !== null) {
+			$matching = $this->purchasesByItemCount($this->purchasesBetween($from, $to), $minItems, $maxItems) ?? [];
+
+			// prázdno se nesmí dostat do IN() — to je v SQL chyba, ne „nic nevyhovuje"
+			if ($matching) {
+				$collection->where('this.fk_purchase', $matching);
+			} else {
+				$collection->where('1=0');
+			}
+		}
+
 		$this->applyFulltext($collection, $query, ['this.code', 'purchase.fullname', 'purchase.email', 'purchase.ic']);
 
 		$page = $this->paginate($collection->orderBy(['this.createdTs' => 'DESC']), $query);
@@ -274,6 +287,7 @@ final class OrdersEndpoint extends BaseEndpoint
 			$this->collectIds($purchases, 'deliveryAddress'),
 		));
 
+		$itemCounts = $this->itemCounts(\array_keys($purchases));
 		$totals = $this->loadTotals($orderIds);
 		$payments = $this->loadPayments($orderIds, $suffix);
 		$deliveries = $this->loadDeliveries($orderIds, $suffix);
@@ -302,11 +316,31 @@ final class OrdersEndpoint extends BaseEndpoint
 				'deliveryType' => $delivery?->typeName ?: null,
 				'trackingUrl' => $delivery !== null ? self::trackingUrl($delivery) : null,
 				'invoiceIds' => $invoices[$id] ?? [],
+				'itemCount' => $itemCounts[(string) self::idValue($order, 'purchase')] ?? 0,
 				'items' => null,
 			];
 		}
 
 		return $extras;
+	}
+
+	/**
+	 * Nákupy objednávek v okně. Canceled se nevyřazují — seznam objednávek je vrací taky.
+	 * @return array<string>
+	 */
+	private function purchasesBetween(string $from, string $to): array
+	{
+		$rows = $this->connection->rows(['o' => 'eshop_order'], ['purchase' => 'o.fk_purchase'])
+			->where('o.createdTs >= :apiFrom AND o.createdTs <= :apiTo', ['apiFrom' => $from . ' 00:00:00', 'apiTo' => $to . ' 23:59:59'])
+			->where('o.fk_purchase IS NOT NULL');
+
+		$ids = [];
+
+		foreach ($rows as $row) {
+			$ids[(string) $row->purchase] = (string) $row->purchase;
+		}
+
+		return \array_values($ids);
 	}
 
 	/**

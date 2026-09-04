@@ -108,6 +108,96 @@ abstract class BaseEndpoint implements Endpoint
 	}
 
 	/**
+	 * Nákupy, které mají počet položek v zadaném rozsahu. `null` = o velikost nikdo nestojí.
+	 *
+	 * Schválně na dvakrát (nejdřív nákupy okna, pak jejich položky): spojit to do jednoho
+	 * dotazu znamená, že si databáze jako výchozí tabulku vezme milionový `eshop_cartitem`
+	 * a dotaz běží minuty místo vteřiny — stejný důvod, proč tak chodí reporty nad položkami.
+	 * @param array<string> $purchaseIds nákupy, mezi kterými se hledá
+	 * @return array<string>|null
+	 */
+	protected function purchasesByItemCount(array $purchaseIds, ?int $min, ?int $max): ?array
+	{
+		if ($min === null && $max === null) {
+			return null;
+		}
+
+		if (!$purchaseIds) {
+			return [];
+		}
+
+		$having = [];
+		$binds = [];
+
+		if ($min !== null) {
+			$having[] = 'COUNT(ci.uuid) >= :apiMinItems';
+			$binds['apiMinItems'] = $min;
+		}
+
+		if ($max !== null) {
+			$having[] = 'COUNT(ci.uuid) <= :apiMaxItems';
+			$binds['apiMaxItems'] = $max;
+		}
+
+		$rows = $this->connection->rows(['cart' => 'eshop_cart'], ['purchase' => 'cart.fk_purchase'])
+			->join(['ci' => 'eshop_cartitem'], 'ci.fk_cart = cart.uuid', [], 'INNER')
+			->where('cart.fk_purchase', $purchaseIds)
+			->setGroupBy(['cart.fk_purchase'], \implode(' AND ', $having), $binds);
+
+		$ids = [];
+
+		foreach ($rows as $row) {
+			$ids[] = (string) $row->purchase;
+		}
+
+		return $ids;
+	}
+
+	/**
+	 * Kolik položek mají nákupy stránky. Jeden seskupený dotaz, ne dotaz na objednávku.
+	 * @param array<string> $purchaseIds
+	 * @return array<string, int>
+	 */
+	protected function itemCounts(array $purchaseIds): array
+	{
+		if (!$purchaseIds) {
+			return [];
+		}
+
+		$rows = $this->connection->rows(['cart' => 'eshop_cart'], [
+			'purchase' => 'cart.fk_purchase',
+			'cnt' => 'COUNT(ci.uuid)',
+		])
+			->join(['ci' => 'eshop_cartitem'], 'ci.fk_cart = cart.uuid', [], 'INNER')
+			->where('cart.fk_purchase', $purchaseIds)
+			->setGroupBy(['cart.fk_purchase']);
+
+		$map = [];
+
+		foreach ($rows as $row) {
+			$map[(string) $row->purchase] = (int) $row->cnt;
+		}
+
+		return $map;
+	}
+
+	/**
+	 * Meze počtu položek z dotazu. Validuje se tady, ať je hláška všude stejná.
+	 * @return array{0: int|null, 1: int|null}
+	 */
+	protected function itemCountRange(Query $query): array
+	{
+		$min = $query->int('minItems');
+		$max = $query->int('maxItems');
+
+		if ($min !== null && $max !== null && $min > $max) {
+			throw ApiException::badRequest('Parametr minItems nesmí být větší než maxItems.');
+		}
+
+		return [$min, $max];
+	}
+
+	/**
 	 * Prázdno u recenzí znamená u jednoho shopu „nikdo to nehodnotil" a u druhého „hodnocení
 	 * se tu vůbec nevedou". Druhý případ se dá poznat jen jedním levným dotazem, tak ať se
 	 * to řekne rovnou — ať to volající nevydává za nulové hodnocení.

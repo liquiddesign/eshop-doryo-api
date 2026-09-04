@@ -203,7 +203,35 @@ if (isset($order['id'])) {
 	[$status, $detail] = request("$baseUrl/v1/orders/" . \rawurlencode($order['id']), $token);
 	check('detail objednávky má položky', $status === 200 && \is_array($detail['items'] ?? null));
 	check('položka má peníze jako řetězec', !isset($detail['items'][0]) || isMoney($detail['items'][0]['unitPrice']));
+
+	// Velikost objednávky musí jít poznat ze seznamu — jinak se „objednávky nad deset položek"
+	// dají zjistit jen detailem každé zvlášť, což je u tisíců objednávek neproveditelné.
+	check('seznam nese počet položek', \is_int($order['itemCount'] ?? null), \json_encode($order['itemCount'] ?? null));
+	check(
+		'počet položek sedí s detailem',
+		($order['itemCount'] ?? null) === \count($detail['items'] ?? []),
+		"seznam {$order['itemCount']}, detail " . \count($detail['items'] ?? []),
+	);
 }
+
+[$status, $big] = request("$baseUrl/v1/orders?limit=5$ordersWindow&minItems=3", $token);
+check('filtr minItems projde', $status === 200, "dostal jsem $status");
+$mensi = \array_filter($big['items'] ?? [], static fn (array $o): bool => ($o['itemCount'] ?? 0) < 3);
+check('minItems opravdu filtruje', $mensi === [], \count($mensi) . ' objednávek má míň položek, než si řekl filtr');
+
+[$status] = request("$baseUrl/v1/orders?limit=1$ordersWindow&minItems=5&maxItems=2", $token);
+check('minItems větší než maxItems je 400', $status === 400, "dostal jsem $status");
+
+// Otázka „graf objednávek po měsících, jen ty nad N položek" musí jít jedním dotazem.
+[$status, $vse] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow", $token);
+[$status2, $velke] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow&minItems=3", $token);
+$soucet = static fn (array $r): int => \array_sum(\array_column($r['items'] ?? [], 'orders'));
+check('report tržeb bere minItems', $status === 200 && $status2 === 200, "dostal jsem $status a $status2");
+check(
+	'zúžení na větší objednávky report zmenší',
+	$soucet($velke) <= $soucet($vse),
+	$soucet($velke) . ' vs ' . $soucet($vse) . ' objednávek',
+);
 
 [, $products] = request("$baseUrl/v1/products?limit=5", $token);
 $product = $products['items'][0] ?? [];

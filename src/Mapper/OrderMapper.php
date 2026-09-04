@@ -74,6 +74,8 @@ final class OrderMapper extends Mapper
 			'paidOn' => Dates::date($paidOn),
 			'invoiceIds' => \array_values($extras['invoiceIds'] ?? []),
 			'note' => $purchase->note ?: null,
+			// kolik položek objednávka má, ať se to nemusí zjišťovat detailem každé zvlášť
+			'itemCount' => $extras['itemCount'] ?? null,
 			'items' => $extras['items'] ?? null,
 			'eshop' => [
 				'source' => self::source($purchase),

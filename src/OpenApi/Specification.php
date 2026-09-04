@@ -109,6 +109,8 @@ final class Specification
 					$this->param('shippingDate', 'Jen objednávky s tímhle požadovaným datem expedice.'),
 					$this->param('exported', 'true/false — jestli je objednávka zaexportovaná do ERP.', 'boolean'),
 					$this->param('withoutInvoice', 'true = jen objednávky bez faktury.', 'boolean'),
+					$this->param('minItems', 'Jen objednávky s aspoň tolika položkami.', 'integer'),
+					$this->param('maxItems', 'Jen objednávky s nejvýš tolika položkami.', 'integer'),
 					$this->ref('Q'),
 					$this->ref('Limit'),
 					$this->ref('Cursor'),
@@ -182,11 +184,14 @@ final class Specification
 			'/v1/reports/sales' => $this->operation(
 				'Report tržeb',
 				'Počty objednávek a tržby seskupené po měsících, týdnech, dnech, obchodnících nebo kategoriích. '
-					. 'Zrušené objednávky se nepočítají.',
+					. 'Zrušené objednávky se nepočítají. S minItems/maxItems se dá zúžit na objednávky dané '
+					. 'velikosti — třeba „po měsících, jen objednávky nad deset položek" jedním dotazem.',
 				[
 					$this->param('from', 'Začátek období (YYYY-MM-DD).'),
 					$this->param('to', 'Konec období (YYYY-MM-DD).'),
 					$this->param('groupBy', 'Seskupení: month (výchozí), week, day, merchant, customer, category, producer.'),
+					$this->param('minItems', 'Jen objednávky s aspoň tolika položkami.', 'integer'),
+					$this->param('maxItems', 'Jen objednávky s nejvýš tolika položkami.', 'integer'),
 				],
 				'ReportList',
 			),
@@ -604,6 +609,12 @@ final class Specification
 					'totalWithoutVat' => ['$ref' => '#/components/schemas/Money'],
 					'paid' => ['type' => 'boolean'],
 					'invoiceIds' => ['type' => 'array', 'items' => ['type' => 'string']],
+					'itemCount' => [
+						'type' => 'integer',
+						'nullable' => true,
+						'description' => 'Kolik položek objednávka má. Je i v seznamu, takže se velikost objednávky '
+							. 'nemusí zjišťovat detailem každé zvlášť.',
+					],
 					'items' => [
 						'type' => 'array',
 						'nullable' => true,
