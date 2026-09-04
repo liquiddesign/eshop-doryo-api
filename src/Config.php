@@ -96,8 +96,19 @@ final class Config
 		return $this->shopName;
 	}
 
+	/**
+	 * Veřejná adresa shopu pro odkazy v odpovědích. Env DORYO_API_SHOP_URL má přednost před
+	 * konfigurací: config bývá v repu s produkční adresou, zatímco testovací server ji potřebuje
+	 * přepsat bez zásahu do gitu — jinak model čte data z testu a odkazuje na produkci.
+	 */
 	public function getShopUrl(): ?string
 	{
+		$fromEnv = $_SERVER['DORYO_API_SHOP_URL'] ?? \getenv('DORYO_API_SHOP_URL');
+
+		if (\is_string($fromEnv) && $fromEnv !== '') {
+			return \rtrim($fromEnv, '/');
+		}
+
 		return $this->shopUrl;
 	}
 
