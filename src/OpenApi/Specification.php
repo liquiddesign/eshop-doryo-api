@@ -26,7 +26,7 @@ final class Specification
 			'openapi' => '3.0.3',
 			'info' => [
 				'title' => 'Čtecí API e-shopu ' . ($this->config->getShopName() ?? ''),
-				'version' => Config::VERSION,
+				'version' => Config::version(),
 				'description' => 'Jen ke čtení. Objednávky, zákazníci, produkty, sklad a faktury e-shopu '
 					. 've stejném tvaru, v jakém je vydávají ERP konektory. Všechny seznamy jsou stránkované '
 					. 'kurzorem, částky jsou řetězce s měnou, časy jsou v ISO 8601.',
