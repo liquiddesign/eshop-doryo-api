@@ -28,6 +28,13 @@ final class Query
 	 */
 	public function __construct(private array $params, private Config $config)
 	{
+		// limit a cursor zná každý endpoint. Tam, kde se nestránkuje, jsou bez efektu —
+		// ale odmítnout je by byla past: jsou to nejběžnější parametry celého API a volající
+		// je připíše ze zvyku. Tiché ignorování je nebezpečné u FILTRU, protože vrátí
+		// nefiltrovaná data, která vypadají jako odfiltrovaná; ignorovaný limit vrátí
+		// úplný výsledek, tedy odpověď, ze které se špatný závěr udělat nedá.
+		$this->known['limit'] = true;
+		$this->known['cursor'] = true;
 	}
 
 	public function has(string $name): bool

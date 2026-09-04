@@ -133,8 +133,29 @@ foreach (['customers', 'orders', 'invoices', 'products'] as $domain) {
 	check("$domain vrací nejvýš limit položek", \count($data['items'] ?? []) <= 2);
 }
 
-[, $first] = request("$baseUrl/v1/orders?limit=1", $token);
-[, $second] = request("$baseUrl/v1/orders?limit=1&cursor=" . \urlencode((string) ($first['nextCursor'] ?? '')), $token);
+// Bez zadaného rozsahu se bere posledních šest měsíců. Instance s postarší kopií dat
+// (typicky testovací) v tom okně nemá ani jednu objednávku, takže by kontroly tvaru dat
+// běžely naprázdno a hlásily chybu, která žádná není — vada je v datech, ne v API.
+// Okno se proto odvodí z toho, co shop podle capabilities reálně vede.
+$ordersWindow = '';
+$reportWindow = '';
+[, $probe] = request("$baseUrl/v1/orders?limit=1", $token);
+
+if (($probe['items'] ?? []) === []) {
+	[, $caps] = request("$baseUrl/v1/meta/capabilities", $token);
+	$lastAt = $caps['features']['orders']['lastAt'] ?? null;
+
+	if (\is_string($lastAt)) {
+		$to = \substr($lastAt, 0, 10);
+		$from = \date('Y-m-d', (int) \strtotime("$to -6 months"));
+		$ordersWindow = "&createdFrom=$from&createdTo=$to";
+		$reportWindow = "&from=$from&to=$to";
+		echo "  (data jsou starší; kontroly objednávek jedou v okně {$from} - {$to})\n";
+	}
+}
+
+[, $first] = request("$baseUrl/v1/orders?limit=1$ordersWindow", $token);
+[, $second] = request("$baseUrl/v1/orders?limit=1$ordersWindow&cursor=" . \urlencode((string) ($first['nextCursor'] ?? '')), $token);
 check(
 	'kurzor posune na další stránku',
 	isset($first['items'][0]['id'], $second['items'][0]['id']) && $first['items'][0]['id'] !== $second['items'][0]['id'],
@@ -172,7 +193,7 @@ check('filtr since funguje', $status === 200 && ($data['items'] ?? []) === []);
 check('detail neexistujícího záznamu je 404', $status === 404, "dostal jsem $status");
 
 echo "\ntvar dat\n";
-[, $orders] = request("$baseUrl/v1/orders?limit=5", $token);
+[, $orders] = request("$baseUrl/v1/orders?limit=5$ordersWindow", $token);
 $order = $orders['items'][0] ?? [];
 check('objednávka má peníze jako řetězec', isMoney($order['total'] ?? null) && isMoney($order['totalWithoutVat'] ?? null), \json_encode($order['total'] ?? null));
 check('objednávka má normalizovaný stav', \in_array($order['status'] ?? null, ['new', 'processing', 'shipped', 'delivered', 'cancelled', 'returned', null], true));
@@ -188,11 +209,19 @@ if (isset($order['id'])) {
 $product = $products['items'][0] ?? [];
 check('produkt má cenu jako řetězec', isMoney($product['price'] ?? null) && isMoney($product['priceWithVat'] ?? null));
 
-[, $sales] = request("$baseUrl/v1/reports/sales?groupBy=month", $token);
+[, $sales] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow", $token);
 check('report tržeb má klíč a částky', isset($sales['items'][0]['key']) && isMoney($sales['items'][0]['revenue']));
 
 echo "\nzákazník a jeho doklady\n";
-$customerId = $order['customerId'] ?? null;
+$customerId = null;
+
+foreach ($orders['items'] ?? [] as $candidate) {
+	if (($candidate['customerId'] ?? null) !== null) {
+		$customerId = $candidate['customerId'];
+
+		break;
+	}
+}
 
 if ($customerId === null) {
 	check('objednávka nese zákazníka', false, 'v prvních pěti objednávkách žádný není, kontroly zákazníka přeskočeny');
