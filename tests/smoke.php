@@ -446,6 +446,26 @@ foreach (['customers?limit=20', 'orders?limit=20', 'invoices?limit=20', 'product
 
 echo "\nsrozumitelnost pro volajícího\n";
 
+// „Nemáme skladem" a „ten kód neznáme" jsou jiné odpovědi; prázdný seznam je pro obojí stejný.
+[$status, $sklad] = request("$baseUrl/v1/stock?code=NEEXISTUJICI-KOD-XYZ", $token);
+check('neznámý kód na skladě to řekne', $status === 200 && ($sklad['items'] ?? null) === [] && isset($sklad['note']), "status $status");
+
+if ($productCode !== null) {
+	[$status, $znamy] = request("$baseUrl/v1/stock?code=" . \rawurlencode($productCode), $token);
+	check('známý kód poznámku nemá', $status === 200 && isset($znamy['items'][0]) && !isset($znamy['note']));
+}
+
+// Pohledávky bez identifikovatelného odběratele nesmí sedět v žebříčku zákazníků — slily by se
+// do jednoho bezejmenného řádku a ten by se podle částky postavil na první místo.
+[$status, $pohledavky] = request("$baseUrl/v1/reports/receivables?limit=50", $token);
+check('report pohledávek', $status === 200, "dostal jsem $status");
+$bezJmena = \array_filter($pohledavky['items'] ?? [], static fn (array $r): bool => ($r['name'] ?? null) === null && ($r['registrationNo'] ?? null) === null);
+check('v pohledávkách nejsou bezejmenné řádky', $bezJmena === [], \count($bezJmena) . ' řádků bez odběratele');
+
+if (isset($pohledavky['unassigned'])) {
+	check('nepřiřazené pohledávky mají souhrn i vysvětlení', isset($pohledavky['unassigned']['invoices'], $pohledavky['note']));
+}
+
 // Překlep v názvu parametru nesmí projít tiše — jinak volající dostane nefiltrovaná data
 // a bude je považovat za odfiltrovaná.
 [$status, $problem] = request("$baseUrl/v1/orders?limit=1&zakaznik=nesmysl", $token);

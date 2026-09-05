@@ -91,6 +91,31 @@ final class StockEndpoint extends BaseEndpoint
 			];
 		}
 
-		return Response::list($items, $page['nextCursor']);
+		$response = Response::list($items, $page['nextCursor']);
+
+		if ($items) {
+			return $response;
+		}
+
+		// „Nemáme skladem" a „takový kód neznáme" vypadají obojí jako prázdný seznam, ale vedou
+		// k jiné odpovědi. Produkt, který v katalogu je, se vrátí i s nulovou zásobou — když se
+		// tedy ptali na konkrétní kód a nevrátilo se nic, ten kód prostě neexistuje. Řekněme to.
+		$hledane = \array_filter(['code' => $code, 'ean' => $ean, 'id' => $id], static fn (?string $v): bool => $v !== null);
+
+		if (!$hledane) {
+			return $response;
+		}
+
+		$vypis = [];
+
+		foreach ($hledane as $klic => $hodnota) {
+			$vypis[] = "$klic=$hodnota";
+		}
+
+		return $response->withExtra(['note' => \sprintf(
+			'Katalog nezná %s — tohle NENÍ „nemáme skladem". Produkt, který v katalogu je, se vrátí '
+				. 'i s nulovou zásobou. Zkus /v1/search?q=… nebo jiný tvar kódu.',
+			\implode(', ', $vypis),
+		)]);
 	}
 }

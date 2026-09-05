@@ -209,6 +209,12 @@ final class ReportsEndpoint extends BaseEndpoint
 			$rows->where("i.dueDate < '$today'");
 		}
 
+		// Faktury, u kterých není ani zákazník, ani IČO, ani odběratel, by se seskupily do
+		// JEDNOHO řádku bez jména (GROUP BY dá všechny NULL dohromady) — a protože je jich
+		// hodně, sedl by si ten řádek na první místo a tvářil se jako největší dlužník.
+		// Na mcprofi je to 16 tisíc faktur z Allegra, kde je kupující anonymní. Do žebříčku
+		// zákazníků nepatří; sečtou se zvlášť, ať se ani neztratí, ani nepletou.
+		$rows->where('IFNULL(i.fk_customer, IFNULL(i.ic, i.subject)) IS NOT NULL');
 		$rows->orderBy(['outstanding' => 'DESC'])->setTake($query->limit());
 
 		$items = [];
@@ -231,7 +237,51 @@ final class ReportsEndpoint extends BaseEndpoint
 			];
 		}
 
-		return Response::list($items, null);
+		return Response::list($items, null)->withExtra($this->unassignedReceivables($overdueOnly, $today, $amount, $currency));
+	}
+
+	/**
+	 * Pohledávky, které se nedají přiřadit odběrateli — souhrn místo řádku v žebříčku.
+	 * @return array<string, mixed>
+	 */
+	private function unassignedReceivables(bool $overdueOnly, string $today, string $amount, string $currency): array
+	{
+		$rows = $this->connection->rows(['i' => 'eshop_invoice'], [
+			'invoices' => 'COUNT(*)',
+			'outstanding' => "SUM($amount)",
+			'overdue' => "SUM(IF(i.dueDate < '$today', $amount, 0))",
+		])
+			->where('i.canceled IS NULL')
+			->where('i.paidDate IS NULL')
+			->where('IFNULL(i.fk_customer, IFNULL(i.ic, i.subject)) IS NULL');
+
+		if ($overdueOnly) {
+			$rows->where("i.dueDate < '$today'");
+		}
+
+		$row = $rows->first();
+		$invoices = $row !== null ? (int) $row->invoices : 0;
+
+		if (!$invoices) {
+			return [];
+		}
+
+		$outstanding = Money::format($row?->outstanding, $currency);
+
+		return [
+			'unassigned' => [
+				'invoices' => $invoices,
+				'outstanding' => $outstanding,
+				'overdue' => Money::format($row?->overdue, $currency),
+			],
+			'note' => \sprintf(
+				'Mimo seznam je %d faktur za %s bez identifikovatelného odběratele (není u nich zákazník, '
+					. 'IČO ani jméno — typicky prodej přes marketplace). Nejsou to pohledávky za konkrétním '
+					. 'zákazníkem, takže do žebříčku nepatří; kdo za nimi stojí, řekne až detail faktury.',
+				$invoices,
+				$outstanding !== null ? $outstanding['amount'] . ' ' . $currency : 'neznámou částku',
+			),
+		];
 	}
 
 	/**
