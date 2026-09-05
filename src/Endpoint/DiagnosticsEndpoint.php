@@ -54,9 +54,12 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 		$suffix = $this->connection->getMutationSuffix();
 
 		$findings = [];
+		// eshop 2.0 sloupec deletedTs nemá; StORM na neznámou vlastnost vyhodí výjimku,
+		// ale __isset ji ustojí, takže `?? null` je tady bezpečné čtení
+		$deletedTs = $product->deletedTs ?? null;
 
-		if ($product->deletedTs !== null) {
-			$findings[] = self::finding('deleted', self::SEVERITY_BLOCKING, 'Produkt je smazaný (deletedTs ' . $product->deletedTs . ').');
+		if ($deletedTs !== null) {
+			$findings[] = self::finding('deleted', self::SEVERITY_BLOCKING, "Produkt je smazaný (deletedTs $deletedTs).");
 		}
 
 		$draft = (bool) $this->connection->rows(['p' => 'eshop_product'], ['d' => "p.draft$suffix"])->where('p.uuid', $id)->firstValue('d');
@@ -122,7 +125,7 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 			'visible' => !$blocking,
 			'findings' => \array_values($findings),
 			'checks' => [
-				'deleted' => $product->deletedTs !== null,
+				'deleted' => $deletedTs !== null,
 				'draft' => $draft,
 				'visibilityLists' => $lists,
 				'categories' => $categories,
@@ -369,12 +372,11 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 			'pricelist' => 'pl.name',
 			'price' => 'p.price',
 			'currency' => 'pl.fk_currency',
-			'hidden' => 'p.hidden',
 		])
 			->join(['pl' => 'eshop_pricelist'], 'pl.uuid = p.fk_pricelist', [], 'INNER')
 			->where('p.fk_product', $productId)
 			->where('p.fk_pricelist', $pricelists)
-			->where('p.hidden', false);
+			->where($this->priceNotHidden('p'));
 
 		$prices = [];
 

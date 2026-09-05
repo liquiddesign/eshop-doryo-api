@@ -43,7 +43,10 @@ final class ProductMapper extends Mapper
 			'name' => $product->name,
 			'producer' => $extras['producer'] ?? null,
 			'categories' => \array_values($extras['categories'] ?? []),
-			'active' => $product->deletedTs === null,
+			// ?? null, ne přímé čtení: eshop 2.0 sloupec deletedTs nemá a StORM na neznámou
+			// vlastnost vyhodí výjimku (__isset ji ale ustojí). Bez měkkého mazání je produkt
+			// z principu aktivní.
+			'active' => ($product->deletedTs ?? null) === null,
 			'unit' => $product->unit ?: null,
 			'vatRate' => $vatRate,
 			'price' => $price !== null ? Money::format($price, $currency) + ['pricelist' => $extras['pricelist'] ?? null] : null,

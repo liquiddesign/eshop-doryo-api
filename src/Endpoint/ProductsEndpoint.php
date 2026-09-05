@@ -58,7 +58,7 @@ final class ProductsEndpoint extends BaseEndpoint
 		$collection = $this->repository(Product::class)->many();
 
 		if ($query->bool('active', true)) {
-			$collection->where('this.deletedTs IS NULL')->where("this.draft$suffix", false);
+			$collection->where($this->productNotDeleted())->where("this.draft$suffix", false);
 		}
 
 		if ($code = $query->string('code')) {
@@ -113,7 +113,7 @@ final class ProductsEndpoint extends BaseEndpoint
 	 */
 	public function detailByCode(array $params, Query $query): Response
 	{
-		$collection = $this->repository(Product::class)->many()->where('this.deletedTs IS NULL');
+		$collection = $this->repository(Product::class)->many()->where($this->productNotDeleted());
 		ProductCode::filter($collection, [$params['code']], $this->connection);
 		$id = $collection->firstValue('this.uuid');
 
@@ -324,7 +324,7 @@ final class ProductsEndpoint extends BaseEndpoint
 			->join(['pl' => 'eshop_pricelist'], 'pl.uuid = p.fk_pricelist', [], 'INNER')
 			->where('p.fk_product', $ids)
 			->where('p.fk_pricelist', $pricelists)
-			->where('p.hidden', false)
+			->where($this->priceNotHidden('p'))
 			->orderBy(['p.price' => 'ASC']);
 
 		$map = [];

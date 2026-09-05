@@ -113,7 +113,7 @@ final class MetaEndpoint extends BaseEndpoint
 			),
 			'orderStatuses' => $this->config->getOrderStates(),
 			'counts' => [
-				'products' => $this->count('eshop_product', 'this.deletedTs IS NULL'),
+				'products' => $this->count('eshop_product', $this->productNotDeleted()),
 				'customers' => $this->count('eshop_customer'),
 				'orders' => $this->count('eshop_order'),
 				'invoices' => $this->count('eshop_invoice'),

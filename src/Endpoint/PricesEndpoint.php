@@ -211,7 +211,7 @@ final class PricesEndpoint extends BaseEndpoint
 	private function listPrices(array $pricelists, Query $query, int $discountLevel, int $maxDiscount, float $surcharge, ?string $customerId): Response
 	{
 		$suffix = $this->connection->getMutationSuffix();
-		$collection = $this->repository(\Eshop\DB\Product::class)->many()->where('this.deletedTs IS NULL');
+		$collection = $this->repository(\Eshop\DB\Product::class)->many()->where($this->productNotDeleted());
 
 		// Stránkuje se přes produkty, ale ceny se berou z vyjmenovaných ceníků — bez tohohle
 		// omezení by se listovalo celým katalogem a ceník se 139 položkami by na první
@@ -219,7 +219,7 @@ final class PricesEndpoint extends BaseEndpoint
 		// jako prázdný ceník; ve skutečnosti byly ty ceny až na jedenácté stránce.
 		$collection->where(
 			'this.uuid IN (SELECT dp.fk_product FROM eshop_price dp WHERE dp.fk_pricelist IN ('
-				. Sql::inList($this->connection, $pricelists) . ') AND dp.hidden = 0)',
+				. Sql::inList($this->connection, $pricelists) . ') AND ' . $this->priceNotHidden('dp') . ')',
 		);
 
 		$codes = $query->strings('codes');
@@ -307,7 +307,7 @@ final class PricesEndpoint extends BaseEndpoint
 			->join(['prod' => 'eshop_product'], 'prod.uuid = p.fk_product', [], 'INNER')
 			->where('p.fk_product', $productIds)
 			->where('p.fk_pricelist', $pricelists)
-			->where('p.hidden', false)
+			->where($this->priceNotHidden('p'))
 			->orderBy(['pl.priority' => 'ASC', 'price' => 'ASC']);
 
 		$map = [];
@@ -337,8 +337,8 @@ final class PricesEndpoint extends BaseEndpoint
 		$prices = $this->connection->rows(['p' => 'eshop_price'], ['id' => 'p.fk_pricelist', 'cnt' => 'COUNT(*)'])
 			->join(['prod' => 'eshop_product'], 'prod.uuid = p.fk_product', [], 'INNER')
 			->where('p.fk_pricelist', $ids)
-			->where('p.hidden', false)
-			->where('prod.deletedTs IS NULL')
+			->where($this->priceNotHidden('p'))
+			->where($this->productNotDeleted('prod'))
 			->setGroupBy(['p.fk_pricelist']);
 
 		foreach ($prices as $row) {

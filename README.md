@@ -5,7 +5,13 @@ a faktury v jednotné projekci, ve stejném tvaru, v jakém je vydávají ERP ko
 
 Balík staví na `liquiddesign/eshop` a nepotřebuje od shopu nic než konfiguraci. Rozdíly mezi
 verzemi 2.0–2.2 řeší uvnitř: repozitáře si bere přes `DIConnection::findRepository()`, chybějící
-sloupec nebo relace je `null`, ne chyba, a `/v1/meta/capabilities` řekne, co daný shop reálně vede.
+tabulka nebo relace je `null`, ne chyba, a `/v1/meta/capabilities` řekne, co daný shop reálně vede.
+
+Se sloupci, které mezi verzemi přibyly, se počítá zvlášť — chybějící sloupec v podmínce dotaz
+neshodí, jen se podmínka vynechá (`Codebooks::hasColumn()`). Týká se to `eshop_product.deletedTs`
+a `eshop_price.hidden`, které jsou až od eshopu 2.1; shop na 2.0 produkty měkce nemaže a ceny
+neskrývá, takže tam ty podmínky nedávají smysl. Běží to i na StORM 1.1 — balík z něj používá
+jen API, které je v 1.1 i 2.0 shodné.
 
 **Jen ke čtení.** Žádný endpoint nemění data; jiná metoda než GET/HEAD vrací `405`.
 

@@ -576,7 +576,7 @@ final class ReportsEndpoint extends BaseEndpoint
 		$pricelists = $this->codebooks->getDefaultPricelists();
 		// pole se do surového výrazu navázat nedá, hodnoty se citují rovnou (viz Sql::inList)
 		$pricelistCondition = $pricelists
-			? 'this.uuid NOT IN (SELECT pr.fk_product FROM eshop_price pr WHERE pr.hidden = 0 AND pr.fk_pricelist IN ('
+			? 'this.uuid NOT IN (SELECT pr.fk_product FROM eshop_price pr WHERE ' . $this->priceNotHidden('pr') . ' AND pr.fk_pricelist IN ('
 				. Sql::inList($this->connection, $pricelists) . '))'
 			: null;
 
@@ -617,7 +617,7 @@ final class ReportsEndpoint extends BaseEndpoint
 
 			// dvakrát nová kolekce schválně: StORM nedovolí měnit tu, ze které se už četlo
 			$build = fn (): \StORM\Collection => $this->repository(\Eshop\DB\Product::class)->many()
-				->where('this.deletedTs IS NULL')
+				->where($this->productNotDeleted())
 				->where($check['where']);
 
 			$count = $build()->count();

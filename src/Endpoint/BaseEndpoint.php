@@ -86,6 +86,26 @@ abstract class BaseEndpoint implements Endpoint
 	}
 
 	/**
+	 * Podmínka „produkt není smazaný".
+	 *
+	 * `deletedTs` přibyl v eshopu 2.1; starší shopy produkty měkce nemažou, takže tam podmínka
+	 * nedává smysl a hlavně by shodila dotaz. Vrací se `1=1`, ne null, aby volající místa
+	 * zůstala jednoduchá — podmínka se dá vždycky vložit tam, kde stála dřív.
+	 */
+	protected function productNotDeleted(string $alias = 'this'): string
+	{
+		return $this->codebooks->hasColumn('eshop_product', 'deletedTs') ? "$alias.deletedTs IS NULL" : '1=1';
+	}
+
+	/**
+	 * Podmínka „cena není skrytá". `hidden` je na cenách taky až od eshopu 2.1.
+	 */
+	protected function priceNotHidden(string $alias = 'p'): string
+	{
+		return $this->codebooks->hasColumn('eshop_price', 'hidden') ? "$alias.hidden = 0" : '1=1';
+	}
+
+	/**
 	 * Má ta tabulka vůbec nějaký použitelný řádek? Levné `LIMIT 1`, ne COUNT.
 	 *
 	 * Slouží k rozlišení „tenhle záznam nic nemá" od „tuhle doménu shop nevede" — což je

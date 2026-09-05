@@ -27,8 +27,44 @@ final class Codebooks
 	/** @var array<string>|null */
 	private ?array $defaultPricelists = null;
 
+	/** @var array<string, array<string, true>> sloupce per tabulka, načtené líně */
+	private array $tableColumns = [];
+
 	public function __construct(private DIConnection $connection, private Config $config)
 	{
+	}
+
+	/**
+	 * Má ta tabulka tenhle sloupec?
+	 *
+	 * Balík má umět eshop 2.0 až 2.2 a mezi verzemi sloupce přibývaly — `eshop_product.deletedTs`
+	 * a `eshop_price.hidden` jsou až od 2.1. U chybějící tabulky se dá vrátit prázdno, ale
+	 * chybějící sloupec v podmínce shodí celý dotaz, takže se na něj musí zeptat dopředu.
+	 * Ptá se jednou za tabulku a request; reálně jsou to nejvýš dva dotazy.
+	 */
+	public function hasColumn(string $table, string $column): bool
+	{
+		if (!isset($this->tableColumns[$table])) {
+			$names = [];
+
+			try {
+				$rows = $this->connection->rows(['c' => 'information_schema.COLUMNS'], ['name' => 'c.COLUMN_NAME'])
+					->where('c.TABLE_SCHEMA = DATABASE()')
+					->where('c.TABLE_NAME', $table);
+
+				foreach ($rows as $row) {
+					$names[$row->name] = true;
+				}
+			} catch (\Throwable) {
+				// bez přístupu k information_schema radši předpokládáme, že sloupec není,
+				// než abychom shodili každý dotaz nad tou tabulkou
+				$names = [];
+			}
+
+			$this->tableColumns[$table] = $names;
+		}
+
+		return isset($this->tableColumns[$table][$column]);
 	}
 
 	public function getCurrencyCode(?string $uuid): string

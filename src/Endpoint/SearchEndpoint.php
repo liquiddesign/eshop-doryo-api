@@ -81,7 +81,7 @@ final class SearchEndpoint extends BaseEndpoint
 					'label' => $entity->getFullCode() . ' — ' . $entity->name,
 					'detail' => 'produkt',
 				],
-				static fn ($collection) => $collection->where('this.deletedTs IS NULL')->orderBy(['this.code' => 'ASC']),
+				fn ($collection) => $collection->where($this->productNotDeleted())->orderBy(['this.code' => 'ASC']),
 			),
 			'customers' => $this->collect(
 				'customers',

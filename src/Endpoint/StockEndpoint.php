@@ -43,7 +43,7 @@ final class StockEndpoint extends BaseEndpoint
 		unset($params);
 
 		$suffix = $this->connection->getMutationSuffix();
-		$collection = $this->repository(Product::class)->many()->where('this.deletedTs IS NULL');
+		$collection = $this->repository(Product::class)->many()->where($this->productNotDeleted());
 
 		$code = $query->string('code');
 		$ean = $query->string('ean');
