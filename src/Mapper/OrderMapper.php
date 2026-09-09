@@ -41,6 +41,7 @@ final class OrderMapper extends Mapper
 	 *     deliveryType?: string|null,
 	 *     trackingUrl?: string|null,
 	 *     invoiceIds?: array<string>,
+	 *     itemCount?: int|null,
 	 *     items?: array<array<string, mixed>>|null
 	 * } $extras
 	 * @return array<string, mixed>
