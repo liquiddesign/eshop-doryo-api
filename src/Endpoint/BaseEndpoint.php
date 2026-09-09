@@ -64,32 +64,6 @@ abstract class BaseEndpoint implements Endpoint
 	}
 
 	/**
-	 * Má tahle tabulka takový sloupec? Verze eshopu se liší a dotaz nad chybějícím sloupcem
-	 * nespadne hezky — skončí chybou databáze místo prázdné hodnoty. Ptá se `information_schema`
-	 * jednou za požadavek; mapper na entitách si vystačí s `value()` v try/catch, ale surové SQL
-	 * v reportech tuhle otázku položit musí.
-	 * @var array<string, bool>
-	 */
-	private array $columnCache = [];
-
-	protected function columnExists(string $table, string $column): bool
-	{
-		$key = $table . '.' . $column;
-
-		if (isset($this->columnCache[$key])) {
-			return $this->columnCache[$key];
-		}
-
-		$found = $this->connection->rows(['c' => 'information_schema.COLUMNS'], ['cnt' => 'COUNT(*)'])
-			->where('c.TABLE_SCHEMA = DATABASE()')
-			->where('c.TABLE_NAME = :apiTable', ['apiTable' => $table])
-			->where('c.COLUMN_NAME = :apiColumn', ['apiColumn' => $column])
-			->firstValue('cnt');
-
-		return $this->columnCache[$key] = ((int) $found) > 0;
-	}
-
-	/**
 	 * @template T of \StORM\Entity
 	 * @param \StORM\Collection<T> $collection
 	 * @param array<string> $columns
