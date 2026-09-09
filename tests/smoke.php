@@ -364,6 +364,84 @@ foreach (['customers', 'receivables', 'churn', 'replenishment'] as $report) {
 	check("report $report", $status === 200 && \is_array($data['items'] ?? null), "status $status");
 }
 
+// Churn je segment pro rozesílku, takže se z něj musí dát složit seznam příjemců rovnou —
+// bez doptávání na /v1/customers/{id} u každého zvlášť. K tomu stránkování a řazení.
+echo "\nchurn — kontakt, stránkování a řazení\n";
+
+$churnUrl = "$baseUrl/v1/reports/churn?inactiveDays=365&minOrders=1";
+[$status, $churn] = request("$churnUrl&limit=2", $token);
+check('churn odpovídá', $status === 200 && \is_array($churn['items'] ?? null), "status $status");
+
+$churnItem = $churn['items'][0] ?? null;
+
+if ($churnItem !== null) {
+	check(
+		'churn nese kontakt',
+		\array_key_exists('email', $churnItem) && \array_key_exists('phone', $churnItem) && \array_key_exists('newsletter', $churnItem),
+		'chybí ' . \implode(', ', \array_diff(['email', 'phone', 'newsletter'], \array_keys($churnItem))),
+	);
+	check(
+		'kontakt má očekávané typy',
+		($churnItem['email'] === null || \is_string($churnItem['email']))
+			&& ($churnItem['phone'] === null || \is_string($churnItem['phone']))
+			&& ($churnItem['newsletter'] === null || \is_bool($churnItem['newsletter'])),
+	);
+	check('churn nese útratu jako částku', isMoney($churnItem['revenue'] ?? null));
+	check(
+		'churn drží slíbenou hranici nečinnosti',
+		!\is_int($churnItem['daysSinceLastOrder']) || $churnItem['daysSinceLastOrder'] >= 365,
+		'daysSinceLastOrder = ' . \var_export($churnItem['daysSinceLastOrder'] ?? null, true),
+	);
+}
+
+// Dřív vracel churn jen `limit` záznamů a `hasMore: false` — tvrdil tedy, že tisícovka
+// nejbohatších jsou všichni. Stránka se musí dát dojet kurzorem a nesmí opakovat zákazníky.
+if (($churn['hasMore'] ?? false) === true) {
+	check('churn se stránkuje kurzorem', \is_string($churn['nextCursor'] ?? null));
+
+	[$status, $druha] = request("$churnUrl&limit=2&cursor=" . \rawurlencode((string) $churn['nextCursor']), $token);
+	check('druhá stránka churnu odpovídá', $status === 200 && \is_array($druha['items'] ?? null), "status $status");
+
+	$prvni = \array_column($churn['items'], 'customerId');
+	$dalsi = \array_column($druha['items'] ?? [], 'customerId');
+	check(
+		'druhá stránka churnu vrací jiné zákazníky',
+		\array_intersect($prvni, $dalsi) === [],
+		'opakuje se ' . \implode(', ', \array_intersect($prvni, $dalsi)),
+	);
+
+	// stránkování musí dát totéž co jeden souvislý dotaz — jinak se při rozesílce někdo ztratí
+	[, $najednou] = request("$churnUrl&limit=4", $token);
+	check(
+		'stránky churnu sedí na souvislý výpis',
+		\array_slice(\array_column($najednou['items'] ?? [], 'customerId'), 0, 4) === \array_merge($prvni, $dalsi),
+	);
+}
+
+[$status, $podleData] = request("$churnUrl&limit=3&orderBy=lastOrder", $token);
+check('churn umí řadit podle poslední objednávky', $status === 200 && \is_array($podleData['items'] ?? null), "status $status");
+$datumy = \array_column($podleData['items'] ?? [], 'lastOrderOn');
+$sestupne = $datumy;
+\rsort($sestupne);
+check('řazení podle lastOrder je sestupné', $datumy === $sestupne, \implode(' > ', $datumy));
+
+[$status, $chyba] = request("$churnUrl&orderBy=nesmysl", $token);
+check('neznámé orderBy je 400', $status === 400, "dostal jsem $status");
+check('hláška k orderBy říká, co se smí', \str_contains((string) ($chyba['detail'] ?? ''), 'revenue'));
+
+// Okno dotazu se musí roztáhnout podle inactiveDays. Dřív se koukalo jen `maxWindowMonths`
+// (24 měsíců) zpět, takže „přes dva roky bez objednávky" nevrátilo nikdy nic.
+[$status, $dlouho] = request("$baseUrl/v1/reports/churn?inactiveDays=800&minOrders=1&limit=3", $token);
+check('churn dosáhne i za hranici maxWindowMonths', $status === 200 && \is_array($dlouho['items'] ?? null), "status $status");
+check(
+	'zákazníci mlčící přes 800 dní tam opravdu jsou',
+	\array_reduce(
+		$dlouho['items'] ?? [],
+		static fn (bool $ok, array $item): bool => $ok && (!\is_int($item['daysSinceLastOrder']) || $item['daysSinceLastOrder'] >= 800),
+		true,
+	),
+);
+
 [$status, $growth] = request("$baseUrl/v1/reports/customers?limit=5&sort=growth", $token);
 check(
 	'report zákazníků nese srovnání',

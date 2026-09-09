@@ -243,50 +243,6 @@ final class ReportsEndpoint extends BaseEndpoint
 	}
 
 	/**
-	 * Pohledávky, které se nedají přiřadit odběrateli — souhrn místo řádku v žebříčku.
-	 * @return array<string, mixed>
-	 */
-	private function unassignedReceivables(bool $overdueOnly, string $today, string $amount, string $currency): array
-	{
-		$rows = $this->connection->rows(['i' => 'eshop_invoice'], [
-			'invoices' => 'COUNT(*)',
-			'outstanding' => "SUM($amount)",
-			'overdue' => "SUM(IF(i.dueDate < '$today', $amount, 0))",
-		])
-			->where('i.canceled IS NULL')
-			->where('i.paidDate IS NULL')
-			->where('IFNULL(i.fk_customer, IFNULL(i.ic, i.subject)) IS NULL');
-
-		if ($overdueOnly) {
-			$rows->where("i.dueDate < '$today'");
-		}
-
-		$row = $rows->first();
-		$invoices = $row !== null ? (int) $row->invoices : 0;
-
-		if (!$invoices) {
-			return [];
-		}
-
-		$outstanding = Money::format($row?->outstanding, $currency);
-
-		return [
-			'unassigned' => [
-				'invoices' => $invoices,
-				'outstanding' => $outstanding,
-				'overdue' => Money::format($row?->overdue, $currency),
-			],
-			'note' => \sprintf(
-				'Mimo seznam je %d faktur za %s bez identifikovatelného odběratele (není u nich zákazník, '
-					. 'IČO ani jméno — typicky prodej přes marketplace). Nejsou to pohledávky za konkrétním '
-					. 'zákazníkem, takže do žebříčku nepatří; kdo za nimi stojí, řekne až detail faktury.',
-				$invoices,
-				$outstanding !== null ? $outstanding['amount'] . ' ' . $currency : 'neznámou částku',
-			),
-		];
-	}
-
-	/**
 	 * Kdo přestal odebírat: zákazníci, kteří mívali objednávky, ale poslední mají starší než
 	 * `inactiveDays`. Vrací i to, co u nich shop dřív utržil — ať je vidět, o co jde.
 	 * @param array<string, string> $params
@@ -304,12 +260,12 @@ final class ReportsEndpoint extends BaseEndpoint
 		$maxMonths = \max($this->config->getMaxWindowMonths(), (int) \ceil($inactiveDays / 30) + 1);
 		$order = $query->string('orderBy', 'revenue');
 
-		if (!\in_array($order, self::CHURN_ORDER, true)) {
+		if (!Arrays::contains(self::CHURN_ORDER, $order)) {
 			throw ApiException::badRequest('Parametr orderBy musí být jeden z: ' . \implode(', ', self::CHURN_ORDER) . '.');
 		}
 
 		// `newsletter` má jen novější eshop; kde sloupec není, vrací se null místo pádu dotazu.
-		$newsletter = $this->columnExists('eshop_customer', 'newsletter');
+		$newsletter = $this->codebooks->hasColumn('eshop_customer', 'newsletter');
 
 		$select = [
 			'customerId' => 'p.fk_customer',
@@ -369,7 +325,7 @@ final class ReportsEndpoint extends BaseEndpoint
 				'name' => $row->name,
 				'email' => $row->email ?: null,
 				'phone' => $row->phone ?: null,
-				'newsletter' => $newsletter ? (bool) $row->newsletter : null,
+				'newsletter' => $newsletter && $row->newsletter !== null ? (bool) $row->newsletter : null,
 				'orders' => (int) $row->orders,
 				'revenue' => Money::format($row->revenue, $currency),
 				'firstOrderOn' => Dates::date($row->firstOrderOn),
@@ -828,6 +784,50 @@ final class ReportsEndpoint extends BaseEndpoint
 		$response['topProducts'] = $top;
 
 		return new Response($response);
+	}
+
+	/**
+	 * Pohledávky, které se nedají přiřadit odběrateli — souhrn místo řádku v žebříčku.
+	 * @return array<string, mixed>
+	 */
+	private function unassignedReceivables(bool $overdueOnly, string $today, string $amount, string $currency): array
+	{
+		$rows = $this->connection->rows(['i' => 'eshop_invoice'], [
+			'invoices' => 'COUNT(*)',
+			'outstanding' => "SUM($amount)",
+			'overdue' => "SUM(IF(i.dueDate < '$today', $amount, 0))",
+		])
+			->where('i.canceled IS NULL')
+			->where('i.paidDate IS NULL')
+			->where('IFNULL(i.fk_customer, IFNULL(i.ic, i.subject)) IS NULL');
+
+		if ($overdueOnly) {
+			$rows->where("i.dueDate < '$today'");
+		}
+
+		$row = $rows->first();
+		$invoices = $row !== null ? (int) $row->invoices : 0;
+
+		if (!$invoices) {
+			return [];
+		}
+
+		$outstanding = Money::format($row?->outstanding, $currency);
+
+		return [
+			'unassigned' => [
+				'invoices' => $invoices,
+				'outstanding' => $outstanding,
+				'overdue' => Money::format($row?->overdue, $currency),
+			],
+			'note' => \sprintf(
+				'Mimo seznam je %d faktur za %s bez identifikovatelného odběratele (není u nich zákazník, '
+					. 'IČO ani jméno — typicky prodej přes marketplace). Nejsou to pohledávky za konkrétním '
+					. 'zákazníkem, takže do žebříčku nepatří; kdo za nimi stojí, řekne až detail faktury.',
+				$invoices,
+				$outstanding !== null ? $outstanding['amount'] . ' ' . $currency : 'neznámou částku',
+			),
+		];
 	}
 
 	/**

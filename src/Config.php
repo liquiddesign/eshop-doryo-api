@@ -103,6 +103,8 @@ final class Config
 	 */
 	public function getShopUrl(): ?string
 	{
+		// $_SERVER kvůli proměnným, které do prostředí pouští webserver (getenv je u FPM nevidí)
+		// phpcs:ignore SlevomatCodingStandard.Variables.DisallowSuperGlobalVariable
 		$fromEnv = $_SERVER['DORYO_API_SHOP_URL'] ?? \getenv('DORYO_API_SHOP_URL');
 
 		if (\is_string($fromEnv) && $fromEnv !== '') {
@@ -204,6 +206,19 @@ final class Config
 	 * Verze balíku liquiddesign/eshop, nad kterým API běží. Doryo si podle ní umí ohlídat,
 	 * že mluví s tím, co čeká.
 	 */
+	public function getEshopVersion(): ?string
+	{
+		if (!\class_exists(\Composer\InstalledVersions::class)) {
+			return null;
+		}
+
+		try {
+			return \Composer\InstalledVersions::getPrettyVersion('liquiddesign/eshop');
+		} catch (\Throwable) {
+			return null;
+		}
+	}
+
 	/**
 	 * Verze balíku (vrací ji /meta/health a kořen API) — z nainstalovaného tagu, ne z konstanty,
 	 * kterou by bylo potřeba při každém vydání ručně přepsat.
@@ -218,19 +233,6 @@ final class Config
 			return \ltrim(\Composer\InstalledVersions::getPrettyVersion('liquiddesign/eshop-doryo-api') ?? self::VERSION, 'v');
 		} catch (\Throwable) {
 			return self::VERSION;
-		}
-	}
-
-	public function getEshopVersion(): ?string
-	{
-		if (!\class_exists(\Composer\InstalledVersions::class)) {
-			return null;
-		}
-
-		try {
-			return \Composer\InstalledVersions::getPrettyVersion('liquiddesign/eshop');
-		} catch (\Throwable) {
-			return null;
 		}
 	}
 }

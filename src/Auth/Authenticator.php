@@ -58,31 +58,6 @@ final class Authenticator
 	}
 
 	/**
-	 * Apache s PHP přes FastCGI/CGI hlavičku Authorization do PHP nepředává. Obvyklá záplata
-	 * v .htaccess (`RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]`) ji uloží do
-	 * prostředí — a protože front controller je vnitřní přesměrování, často s prefixem REDIRECT_.
-	 * Nette ji tam nehledá, tak se podíváme sami; na mod_php a FPM s CGIPassAuth stačí hlavička.
-	 */
-	private static function authorizationHeader(IRequest $request): string
-	{
-		$header = (string) $request->getHeader('authorization');
-
-		if ($header !== '') {
-			return $header;
-		}
-
-		foreach (['HTTP_AUTHORIZATION', 'REDIRECT_HTTP_AUTHORIZATION'] as $key) {
-			$value = $_SERVER[$key] ?? null;
-
-			if (\is_string($value) && $value !== '') {
-				return $value;
-			}
-		}
-
-		return '';
-	}
-
-	/**
 	 * Shoda IP s adresou nebo CIDR rozsahem (IPv4 i IPv6).
 	 */
 	public static function matches(string $ip, string $range): bool
@@ -124,5 +99,32 @@ final class Authenticator
 		$subnetByte = $subnetBinary[$bytes] ?? "\0";
 
 		return ($ipByte & $mask) === ($subnetByte & $mask);
+	}
+
+	/**
+	 * Apache s PHP přes FastCGI/CGI hlavičku Authorization do PHP nepředává. Obvyklá záplata
+	 * v .htaccess (`RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]`) ji uloží do
+	 * prostředí — a protože front controller je vnitřní přesměrování, často s prefixem REDIRECT_.
+	 * Nette ji tam nehledá, tak se podíváme sami; na mod_php a FPM s CGIPassAuth stačí hlavička.
+	 */
+	private static function authorizationHeader(IRequest $request): string
+	{
+		$header = (string) $request->getHeader('authorization');
+
+		if ($header !== '') {
+			return $header;
+		}
+
+		foreach (['HTTP_AUTHORIZATION', 'REDIRECT_HTTP_AUTHORIZATION'] as $key) {
+			// jediné místo, kde se ta hlavička dá přečíst — Nette\Http\IRequest ji sem nedosáhne
+			// phpcs:ignore Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps,SlevomatCodingStandard.Variables.DisallowSuperGlobalVariable
+			$value = $_SERVER[$key] ?? null;
+
+			if (\is_string($value) && $value !== '') {
+				return $value;
+			}
+		}
+
+		return '';
 	}
 }

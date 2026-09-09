@@ -580,6 +580,7 @@ final class Specification
 				'properties' => [
 					'orders' => ['type' => 'integer'],
 					'revenue' => ['$ref' => '#/components/schemas/Money'],
+					'firstOrderOn' => ['type' => 'string', 'nullable' => true],
 					'lastOrderOn' => ['type' => 'string', 'nullable' => true],
 					'unpaidInvoices' => ['type' => 'integer'],
 					'outstanding' => ['$ref' => '#/components/schemas/Money'],
@@ -790,6 +791,7 @@ final class Specification
 					'newsletter' => ['type' => 'boolean', 'nullable' => true],
 					'orders' => ['type' => 'integer'],
 					'revenue' => ['$ref' => '#/components/schemas/Money'],
+					'firstOrderOn' => ['type' => 'string', 'nullable' => true],
 					'lastOrderOn' => ['type' => 'string', 'nullable' => true],
 					'daysSinceLastOrder' => ['type' => 'integer', 'nullable' => true],
 				],
@@ -816,6 +818,7 @@ final class Specification
 					'quantity' => ['type' => 'integer'],
 					'orders' => ['type' => 'integer'],
 					'revenue' => ['$ref' => '#/components/schemas/Money'],
+					'firstOrderOn' => ['type' => 'string', 'nullable' => true],
 					'lastOrderOn' => ['type' => 'string', 'nullable' => true],
 				],
 			],
