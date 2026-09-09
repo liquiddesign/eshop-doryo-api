@@ -302,11 +302,16 @@ final class Specification
 			),
 			'/v1/reports/churn' => $this->operation(
 				'Kdo přestal odebírat',
-				'Zákazníci, kteří mívali objednávky, ale poslední mají starší než `inactiveDays`.',
+				'Zákazníci, kteří mívali objednávky, ale poslední mají starší než `inactiveDays`. '
+					. 'Vrací i kontakt (`email`, `phone`) a souhlas s newsletterem, takže se z odpovědi dá rovnou '
+					. 'složit seznam příjemců, aniž by ses ptal na každého zákazníka zvlášť. '
+					. '`newsletter: null` znamená, že tenhle shop souhlas neeviduje — ne že souhlas není.',
 				[
-					$this->param('inactiveDays', 'Kolik dní bez objednávky (výchozí 90).', 'integer'),
-					$this->param('minOrders', 'Minimální počet dřívějších objednávek (výchozí 3).', 'integer'),
+					$this->param('inactiveDays', 'Kolik dní bez objednávky (výchozí 90). Okno reportu se podle toho roztáhne.', 'integer'),
+					$this->param('minOrders', 'Minimální počet dřívějších objednávek (výchozí 3). Pro reaktivaci dej 1.', 'integer'),
+					$this->param('orderBy', 'Řazení: `revenue` (výchozí, největší obrat první) nebo `lastOrder` (naposledy objednal první).'),
 					$this->ref('Limit'),
+					$this->ref('Cursor'),
 				],
 				'ChurnList',
 			),
@@ -780,6 +785,9 @@ final class Specification
 				'properties' => [
 					'customerId' => ['type' => 'string'],
 					'name' => ['type' => 'string', 'nullable' => true],
+					'email' => ['type' => 'string', 'nullable' => true],
+					'phone' => ['type' => 'string', 'nullable' => true],
+					'newsletter' => ['type' => 'boolean', 'nullable' => true],
 					'orders' => ['type' => 'integer'],
 					'revenue' => ['$ref' => '#/components/schemas/Money'],
 					'lastOrderOn' => ['type' => 'string', 'nullable' => true],

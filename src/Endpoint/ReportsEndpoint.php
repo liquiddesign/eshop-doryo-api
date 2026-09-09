@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace DoryoApi\Endpoint;
 
 use DoryoApi\Http\ApiException;
+use DoryoApi\Http\Cursor;
 use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
 use DoryoApi\Support\Dates;
@@ -22,6 +23,7 @@ use Nette\Utils\Arrays;
 final class ReportsEndpoint extends BaseEndpoint
 {
 	private const GROUP_BY = ['month', 'week', 'day', 'merchant', 'customer', 'category', 'producer'];
+	private const CHURN_ORDER = ['revenue', 'lastOrder'];
 
 	/**
 	 * @return array<string, string>
@@ -296,16 +298,39 @@ final class ReportsEndpoint extends BaseEndpoint
 		$inactiveDays = $query->int('inactiveDays', 90) ?? 90;
 		$minOrders = $query->int('minOrders', 3) ?? 3;
 		$currency = $this->config->getCurrency();
-		$maxMonths = $this->config->getMaxWindowMonths();
+		// Okno musí sahat aspoň tak daleko, kam se ptá `inactiveDays`, jinak report tiše vynechá
+		// právě ty nejdéle mlčící: s výchozími 24 měsíci by se na `inactiveDays=800` nenašel nikdo,
+		// kdo neobjednal dva roky. Měsíc navíc je rezerva na nestejně dlouhé měsíce.
+		$maxMonths = \max($this->config->getMaxWindowMonths(), (int) \ceil($inactiveDays / 30) + 1);
+		$order = $query->string('orderBy', 'revenue');
 
-		$rows = $this->connection->rows(['o' => 'eshop_order'], [
+		if (!\in_array($order, self::CHURN_ORDER, true)) {
+			throw ApiException::badRequest('Parametr orderBy musí být jeden z: ' . \implode(', ', self::CHURN_ORDER) . '.');
+		}
+
+		// `newsletter` má jen novější eshop; kde sloupec není, vrací se null místo pádu dotazu.
+		$newsletter = $this->columnExists('eshop_customer', 'newsletter');
+
+		$select = [
 			'customerId' => 'p.fk_customer',
 			'name' => 'IFNULL(IFNULL(c.company, c.fullname), p.fullname)',
+			// Kontakt: pravda je účet zákazníka, adresa z jeho objednávek je záloha pro účty
+			// bez e-mailu (MAX() = kterákoli z nich, ne nutně nejnovější — na rozesílku to stačí).
+			// Bez tohohle sloupce se ze segmentu nedá složit seznam příjemců jinak než dotazem
+			// na každého zákazníka zvlášť.
+			'email' => 'IFNULL(c.email, MAX(p.email))',
+			'phone' => 'IFNULL(c.phone, MAX(p.phone))',
 			'orders' => 'COUNT(o.uuid)',
 			'lastOrderOn' => 'MAX(o.createdTs)',
 			'firstOrderOn' => 'MIN(o.createdTs)',
 			'revenue' => 'SUM(' . OrderTotals::withVat('o', 'p') . ')',
-		])
+		];
+
+		if ($newsletter) {
+			$select['newsletter'] = 'c.newsletter';
+		}
+
+		$rows = $this->connection->rows(['o' => 'eshop_order'], $select)
 			->join(['p' => 'eshop_purchase'], 'p.uuid = o.fk_purchase', [], 'INNER')
 			->join(['c' => 'eshop_customer'], 'c.uuid = p.fk_customer')
 			->where('o.canceledTs IS NULL')
@@ -315,17 +340,36 @@ final class ReportsEndpoint extends BaseEndpoint
 				'apiMin' => $minOrders,
 				'apiDays' => $inactiveDays,
 			])
-			->orderBy(['revenue' => 'DESC'])
-			->setTake($query->limit());
+			->orderBy($order === 'lastOrder' ? ['lastOrderOn' => 'DESC'] : ['revenue' => 'DESC']);
+
+		// Stránkuje se jako seznamy: o řádek víc, než klient chtěl, a z toho kurzor. Bez toho
+		// vrátil report tisícovku nejbohatších a `hasMore: false` — tedy tvrdil, že to jsou
+		// všichni, i když jich byly tři tisíce.
+		$limit = $query->limit();
+		$offset = $query->offset();
+		$page = [];
+
+		foreach ($rows->setTake($limit + 1)->setSkip($offset) as $row) {
+			$page[] = $row;
+		}
+
+		$hasMore = \count($page) > $limit;
+
+		if ($hasMore) {
+			\array_pop($page);
+		}
 
 		$items = [];
 
-		foreach ($rows as $row) {
+		foreach ($page as $row) {
 			$last = Dates::date($row->lastOrderOn);
 
 			$items[] = [
 				'customerId' => $row->customerId,
 				'name' => $row->name,
+				'email' => $row->email ?: null,
+				'phone' => $row->phone ?: null,
+				'newsletter' => $newsletter ? (bool) $row->newsletter : null,
 				'orders' => (int) $row->orders,
 				'revenue' => Money::format($row->revenue, $currency),
 				'firstOrderOn' => Dates::date($row->firstOrderOn),
@@ -334,7 +378,7 @@ final class ReportsEndpoint extends BaseEndpoint
 			];
 		}
 
-		return Response::list($items, null);
+		return Response::list($items, $hasMore ? Cursor::encode($offset + $limit) : null);
 	}
 
 	/**
