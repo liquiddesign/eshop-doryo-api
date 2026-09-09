@@ -229,7 +229,7 @@ final class OrdersEndpoint extends BaseEndpoint
 			'id' => 'd.uuid',
 			'type' => "d.typeName$suffix",
 			'trackingLink' => 'dt.trackingLink',
-			'code' => "COALESCE(NULLIF(d.zasilkovnaCode, ''), NULLIF(d.dpdCode, ''), NULLIF(d.pplCode, ''), NULLIF(d.externalId, ''))",
+			'code' => $this->deliveryCode(),
 			'shippedTs' => 'd.shippedTs',
 			'shippingDate' => 'd.shippingDate',
 			'price' => 'd.price',
@@ -387,7 +387,7 @@ final class OrdersEndpoint extends BaseEndpoint
 			'id' => 'd.fk_order',
 			'typeName' => "MAX(d.typeName$suffix)",
 			'trackingLink' => 'MAX(dt.trackingLink)',
-			'code' => 'MAX(COALESCE(NULLIF(d.zasilkovnaCode, \'\'), NULLIF(d.dpdCode, \'\'), NULLIF(d.pplCode, \'\'), NULLIF(d.externalId, \'\')))',
+			'code' => 'MAX(' . $this->deliveryCode() . ')',
 		])
 			->join(['dt' => 'eshop_deliverytype'], 'dt.uuid = d.fk_type')
 			->where('d.fk_order', $orderIds)
@@ -475,6 +475,28 @@ final class OrdersEndpoint extends BaseEndpoint
 		}
 
 		return $map;
+	}
+
+	/**
+	 * Číslo zásilky do SELECTu — první neprázdné z dopravců, které tabulka vede.
+	 *
+	 * Sloupce dopravců přibývaly s verzemi eshopu (`zasilkovnaCode` je až od 2.1) a chybějící
+	 * sloupec shodí celý dotaz, takže se výraz skládá z těch, co v tabulce opravdu jsou.
+	 * Když shop nevede ani jeden, je číslo prostě NULL.
+	 */
+	private function deliveryCode(string $alias = 'd'): string
+	{
+		$parts = [];
+
+		foreach (['zasilkovnaCode', 'dpdCode', 'pplCode', 'externalId'] as $column) {
+			if (!$this->codebooks->hasColumn('eshop_delivery', $column)) {
+				continue;
+			}
+
+			$parts[] = "NULLIF($alias.$column, '')";
+		}
+
+		return $parts ? 'COALESCE(' . \implode(', ', $parts) . ')' : 'NULL';
 	}
 
 	private static function trackingUrl(object $delivery): ?string

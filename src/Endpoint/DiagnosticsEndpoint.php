@@ -172,17 +172,15 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 			}
 		}
 
-		if ($product->imageNeedFix) {
+		if ($this->entityValue($product, 'imageNeedFix')) {
 			$findings[] = self::finding('image-needs-fix', self::SEVERITY_WARNING, 'Obrázek je označený jako vadný (imageNeedFix).');
 		}
 
 		$gallery = (int) $this->connection->rows(['p' => 'eshop_photo'], ['cnt' => 'COUNT(*)'])->where('p.fk_product', $id)->firstValue('cnt');
-		$supplierPhotos = (int) $this->connection->rows(['sp' => 'eshop_supplierproductphoto'], ['cnt' => 'COUNT(*)'])
-			->join(['s' => 'eshop_supplierproduct'], 's.uuid = sp.fk_supplierProduct')
-			->where('s.fk_product', $id)
-			->firstValue('cnt');
+		$supplierPhotos = $this->countSupplierPhotos($id);
+		$importSupplierImages = $this->entityValue($product, 'importSupplierImages');
 
-		if (!$product->imageFileName && $supplierPhotos > 0 && !$product->importSupplierImages) {
+		if (!$product->imageFileName && $supplierPhotos > 0 && $importSupplierImages === false) {
 			$findings[] = self::finding(
 				'supplier-images-disabled',
 				self::SEVERITY_BLOCKING,
@@ -198,12 +196,12 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 			'findings' => $findings,
 			'checks' => [
 				'imageFileName' => $product->imageFileName ?: null,
-				'imageNeedFix' => (bool) $product->imageNeedFix,
+				'imageNeedFix' => (bool) $this->entityValue($product, 'imageNeedFix'),
 				'files' => $files,
 				'galleryPhotos' => $gallery,
 				'supplierPhotos' => $supplierPhotos,
-				'importSupplierImages' => (bool) $product->importSupplierImages,
-				'supplierContentMode' => $product->supplierContentMode,
+				'importSupplierImages' => $importSupplierImages === null ? null : (bool) $importSupplierImages,
+				'supplierContentMode' => $this->entityValue($product, 'supplierContentMode'),
 			],
 		]);
 	}
@@ -408,6 +406,24 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 			return ['url' => $row->url, 'offline' => (bool) $row->offline];
 		} catch (\Throwable) {
 			return null;
+		}
+	}
+
+	/**
+	 * Kolik obrázků k produktu drží dodavatelé.
+	 *
+	 * Obrázky od dodavatelů (`eshop_supplierproductphoto`) vede až novější eshop; kde tabulka
+	 * není, není co počítat a diagnostika kvůli tomu nemá spadnout — vrátí se nula.
+	 */
+	private function countSupplierPhotos(string $productId): int
+	{
+		try {
+			return (int) $this->connection->rows(['sp' => 'eshop_supplierproductphoto'], ['cnt' => 'COUNT(*)'])
+				->join(['s' => 'eshop_supplierproduct'], 's.uuid = sp.fk_supplierProduct')
+				->where('s.fk_product', $productId)
+				->firstValue('cnt');
+		} catch (\Throwable) {
+			return 0;
 		}
 	}
 

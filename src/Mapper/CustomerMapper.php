@@ -29,7 +29,9 @@ final class CustomerMapper extends Mapper
 	public function map(Customer $customer, array $extras = []): array
 	{
 		$currency = $this->config->getCurrency();
-		$active = $customer->buyAllowed && $customer->orderAllowed;
+		// `buyAllowed` a `orderAllowed` má Customer až od eshopu 2.1. Starší shop zákazníkům
+		// nakupovat nezakazuje, takže „nevím" znamená aktivní — ne že ho API prohlásí za mrtvého.
+		$active = ($this->value($customer, 'buyAllowed') ?? true) && ($this->value($customer, 'orderAllowed') ?? true);
 
 		$out = [
 			'id' => $customer->getPK(),

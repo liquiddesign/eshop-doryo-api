@@ -73,7 +73,13 @@ final class ProductsEndpoint extends BaseEndpoint
 			$this->filterByCategory($collection, $category, $suffix);
 		}
 
+		$hasCreatedTs = $this->codebooks->hasColumn('eshop_product', 'createdTs');
+
 		if ($since = $query->dateTime('since')) {
+			if (!$hasCreatedTs) {
+				throw ApiException::badRequest('Parametr since tenhle shop neumí — u produktů nevede datum založení.');
+			}
+
 			$collection->where('this.createdTs >= :apiSince', ['apiSince' => $since]);
 		}
 
@@ -81,7 +87,9 @@ final class ProductsEndpoint extends BaseEndpoint
 
 		$this->applyFulltext($collection, $query, ["this.name$suffix", 'this.code', 'this.ean', 'this.mpn']);
 
-		$page = $this->paginate($collection->orderBy(['this.createdTs' => 'DESC', 'this.uuid' => 'DESC']), $query);
+		// `createdTs` je na produktu až od eshopu 2.1; starší shop řadí aspoň stabilně podle PK
+		$order = $hasCreatedTs ? ['this.createdTs' => 'DESC', 'this.uuid' => 'DESC'] : ['this.uuid' => 'DESC'];
+		$page = $this->paginate($collection->orderBy($order), $query);
 		$extras = $this->loadExtras($page['rows']);
 
 		$items = [];

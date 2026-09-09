@@ -128,6 +128,21 @@ abstract class BaseEndpoint implements Endpoint
 	}
 
 	/**
+	 * Vlastnost, kterou entita starší verze eshopu nemusí mít — chybějící je `null`.
+	 *
+	 * Totéž, co dělá `Mapper::value()`, ale pro endpointy: sáhnout na neexistující sloupec
+	 * je v StORMu výjimka, a kvůli jednomu údaji do diagnostiky nemá spadnout celá odpověď.
+	 */
+	protected function entityValue(\StORM\Entity $entity, string $property): mixed
+	{
+		try {
+			return $entity->getValue($property);
+		} catch (\Throwable) {
+			return null;
+		}
+	}
+
+	/**
 	 * Nákupy, které mají počet položek v zadaném rozsahu. `null` = o velikost nikdo nestojí.
 	 *
 	 * Schválně na dvakrát (nejdřív nákupy okna, pak jejich položky): spojit to do jednoho
