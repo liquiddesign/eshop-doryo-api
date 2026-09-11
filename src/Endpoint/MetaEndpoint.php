@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace DoryoApi\Endpoint;
 
+use DoryoApi\Codebooks;
 use DoryoApi\Config;
 use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
+use DoryoApi\Merchants;
 use DoryoApi\Support\Dates;
 use Nette\Utils\Strings;
+use StORM\DIConnection;
 
 /**
  * Health. Bez platného tokenu odpoví jen „běžím" — o shopu neřekne nic, aby se z veřejné
@@ -16,6 +19,15 @@ use Nette\Utils\Strings;
  */
 final class MetaEndpoint extends BaseEndpoint
 {
+	public function __construct(
+		DIConnection $connection,
+		Config $config,
+		Codebooks $codebooks,
+		private Merchants $merchants,
+	) {
+		parent::__construct($connection, $config, $codebooks);
+	}
+
 	/**
 	 * @return array<string, string>
 	 */
@@ -26,6 +38,7 @@ final class MetaEndpoint extends BaseEndpoint
 			'v1/meta/codebooks' => 'codebooks',
 			'v1/meta/capabilities' => 'capabilities',
 			'v1/suppliers' => 'suppliers',
+			'v1/merchants' => 'merchants',
 			'v1/categories' => 'categories',
 		];
 	}
@@ -195,6 +208,7 @@ final class MetaEndpoint extends BaseEndpoint
 			'supplierImports' => $this->feature($rows, 'eshop_importresult', 'finishedTs', 'Běhy importů od dodavatelů.'),
 			'abandonedCarts' => $this->feature($rows, 'eshop_cart', null, 'Košíky, které nedošly k objednávce.'),
 			'loyalty' => $this->feature($rows, 'eshop_loyaltyprogram', null, 'Věrnostní program a jeho slevové hladiny.'),
+			'merchants' => $this->merchantsFeature($rows),
 		];
 
 		$features['customerPrices'] = [
@@ -256,6 +270,21 @@ final class MetaEndpoint extends BaseEndpoint
 		}
 
 		return Response::list($items, null);
+	}
+
+	/**
+	 * Obchodníci shopu i s tím, kolik na nich visí zákazníků.
+	 *
+	 * Je to druhá půlka odpovědi na „ukaž mi, co prodal Novák": podle čeho se člověk
+	 * na obchodníka napáruje. Filtry `email` a `q` jsou přesně na to — najít id obchodníka
+	 * podle adresy nebo jména, ne procházet seznam očima.
+	 * @param array<string, string> $params
+	 */
+	public function merchants(array $params, Query $query): Response
+	{
+		unset($params);
+
+		return Response::list($this->merchants->all($query->string('email'), $query->string('q')), null);
 	}
 
 	/**
@@ -345,6 +374,45 @@ final class MetaEndpoint extends BaseEndpoint
 			'recordsApproximate' => true,
 			'lastAt' => $used && $timestampColumn !== null ? $this->lastTimestamp($table, $timestampColumn) : null,
 			'detail' => $note,
+		];
+	}
+
+	/**
+	 * Obchodníci: tabulka sama nestačí.
+	 *
+	 * Shop může mít obchodníky vyplněné a přitom je nemít na kom — vazbu drží ERP a do eshopu
+	 * se nepropisuje. Takový shop dřív mlčky vracel `merchantId: null` u všeho a report podle
+	 * obchodníka jediný řádek „bez obchodníka"; z odpovědi to vypadalo jako fakt o prodeji.
+	 * Proto se ptáme na vazbu, ne na tabulku, a když chybí, řekneme rovnou i proč.
+	 * @param array<string, int> $tableRows
+	 * @return array<string, mixed>
+	 */
+	private function merchantsFeature(array $tableRows): array
+	{
+		$detail = 'Obchodníci a jejich zákazníci.';
+
+		if (!\array_key_exists('eshop_merchant', $tableRows)) {
+			return ['available' => false, 'records' => 0, 'recordsApproximate' => true, 'lastAt' => null, 'detail' => "$detail Tabulka v téhle verzi eshopu není."];
+		}
+
+		if (!$this->hasAnyRow('eshop_merchant')) {
+			return ['available' => false, 'records' => 0, 'recordsApproximate' => true, 'lastAt' => null, 'detail' => "$detail Shop je nevede — tabulka je prázdná."];
+		}
+
+		$linked = $this->merchants->hasAnyLink();
+
+		return [
+			'available' => $linked,
+			'records' => $tableRows['eshop_merchant'],
+			'recordsApproximate' => true,
+			'lastAt' => null,
+			'link' => $this->merchants->mode(),
+			'detail' => $linked
+				? "$detail Vazbu na zákazníka drží " . ($this->merchants->usesCode() ? 'kód z ERP u zákazníka i relace' : 'relace fk_merchant')
+					. '; filtr merchantId i reports/sales?groupBy=merchant fungují. Seznam obchodníků je na /v1/merchants.'
+				: "$detail Obchodníci existují, ale u zákazníků ani objednávek není přiřazený ani jeden — vazbu drží nejspíš jen ERP. "
+					. 'Filtr merchantId vrátí prázdno a groupBy=merchant jediný řádek „bez obchodníka"; neber to jako fakt o prodeji '
+					. 'a rovnou řekni, že tenhle shop tržby po obchodnících nevede.',
 		];
 	}
 

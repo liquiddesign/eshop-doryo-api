@@ -67,6 +67,8 @@ Dvě věci, na které se naráží na klasickém serveru:
 | `orderStates` | viz níž | mapa normalizovaný stav → stavy shopu |
 | `invoicePaymentTracked` | `true` | eviduje shop úhrady faktur? kde je vede ERP, dej `false` |
 | `customerPrices` | `false` | vydávat ceny konkrétního zákazníka (vědomá výjimka, viz níž) |
+| `merchantCodeColumn` | `null` | sloupec zákazníka s kódem obchodníka z ERP (viz níž) |
+| `merchantCodeSeparator` | `_` | kód je část hodnoty před tímhle oddělovačem; `''` = celá hodnota |
 | `extensions` | `[]` | služby implementující `DoryoApi\Extension\DoryoApiExtension` |
 
 Výchozí mapa stavů je `new: [open]`, `processing: [received]`, `delivered: [finished]`,
@@ -90,7 +92,7 @@ Zbytek je na `/{prefix}/v1/…`, seznamy v obálce `{ items, nextCursor, hasMore
 - **ceny** — ceníky, ceny z ceníku a (volitelně) ceny konkrétního zákazníka
 - **reporty** — tržby, top produkty, růst a pokles zákazníků, pohledávky, churn, pokrytí zásob,
   expedice, hodnocení, importy, zdraví katalogu, doklady bez protějšku
-- **orientace** — `meta/capabilities`, `meta/codebooks`, `categories`, `suppliers`, `search`
+- **orientace** — `meta/capabilities`, `meta/codebooks`, `categories`, `suppliers`, `merchants`, `search`
 
 ## Aby odpověď nešla přečíst špatně
 
@@ -132,6 +134,41 @@ nepoužívá" — a modelu se pak snadno stane, že si domyslí odpověď.
 Kontrola se neptá jen na existenci řádků, ale na **použitelné** řádky. Ověřeno v praxi: shop měl
 65 tisíc řádků recenzí, ve kterých nebylo ani jedno vyplněné hodnocení — byly to odeslané žádosti
 o hodnocení, ne recenze.
+
+## Obchodník u zákazníka
+
+Základní eshop drží obchodníka relací: `eshop_customer.fk_merchant` u zákazníka a
+`eshop_purchase.fk_merchant` u objednávky (to je obchodník, který ji pořídil za zákazníka).
+Shopy, které zákazníky importují z ERP, ale relaci často nevyplňují a vezou kód obchodníka
+ve vlastním sloupci — Levior má `dealerCode` z K2 ve tvaru `11_01-10`, kde kód obchodníka
+je část před podtržítkem.
+
+Takový shop bez nastavení vrací `merchantId: null` u všeho, `?merchantId=` nevyfiltruje nic
+a `reports/sales?groupBy=merchant` jediný řádek „bez obchodníka". To je horší než chyba:
+vypadá to jako pravda o prodeji. Stačí říct, kde kód je:
+
+```neon
+doryoApi:
+    merchantCodeColumn: dealerCode
+    merchantCodeSeparator: '_'
+```
+
+Pak platí obojí a relace má přednost: kde `fk_merchant` je, bere se on; kde není, rozhodne kód.
+Týká se to projekce zákazníka i objednávky, filtru `merchantId` na obou seznamech a reportu
+tržeb podle obchodníka. Sloupec se **nehádá** — shop, který ho nenastaví, se chová přesně jako
+dosud a nepřibude mu ani jeden JOIN.
+
+Dvě věci, na které narazíš:
+
+- **Objednávkám se obchodník z zákazníka dosazuje jen v tomhle režimu.** `purchase.fk_merchant`
+  totiž znamená „obchodník tu objednávku pořídil", kdežto obchodník u zákazníka je jeho správce.
+  Slévat to i tam, kde shop relaci opravdu používá, by tiše přepsalo význam pole.
+- **`capabilities.merchants` říká, jestli vazba vůbec existuje.** Ne jestli je tabulka
+  obchodníků plná — ta bývá plná i tam, kde vazbu drží jen ERP. Prázdná vazba se v odpovědi
+  přizná, ať model nevydává „bez obchodníka" za fakt.
+
+Koho na koho párovat, ukáže `GET /v1/merchants` — obchodníci s kódem, e-mailem a počtem
+zákazníků, k hledání `?email=` a `?q=`.
 
 ## Co API nikdy nevydá
 

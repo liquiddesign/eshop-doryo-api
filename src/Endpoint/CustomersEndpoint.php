@@ -9,6 +9,7 @@ use DoryoApi\Config;
 use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
 use DoryoApi\Mapper\CustomerMapper;
+use DoryoApi\Merchants;
 use DoryoApi\Support\Dates;
 use DoryoApi\Support\Money;
 use DoryoApi\Support\OrderTotals;
@@ -29,6 +30,7 @@ final class CustomersEndpoint extends BaseEndpoint
 		private CustomerMapper $mapper,
 		private OrdersEndpoint $orders,
 		private InvoicesEndpoint $invoices,
+		private Merchants $merchants,
 	) {
 		parent::__construct($connection, $config, $codebooks);
 	}
@@ -66,7 +68,7 @@ final class CustomersEndpoint extends BaseEndpoint
 		}
 
 		if ($merchantId = $query->string('merchantId')) {
-			$collection->where('this.fk_merchant', $merchantId);
+			$this->merchants->whereCustomerBelongsTo($collection, 'this', $merchantId);
 		}
 
 		if ($since = $query->dateTime('since')) {
@@ -208,7 +210,7 @@ final class CustomersEndpoint extends BaseEndpoint
 		$pricelists = $this->loadPricelists($ids);
 		$rollup = $this->loadRollup($ids);
 		$groups = $this->loadGroups($customers);
-		$merchants = $this->loadMerchantIds($ids);
+		$merchants = $this->merchants->forCustomers($ids);
 
 		$extras = [];
 
@@ -283,31 +285,6 @@ final class CustomersEndpoint extends BaseEndpoint
 		}
 
 		return $map;
-	}
-
-	/**
-	 * Obchodník přiřazený zákazníkovi. Ve verzích eshopu, kde tahle vazba na entitě není,
-	 * se čte přímo sloupec — a když není ani ten, zůstane merchantId null.
-	 * @param array<string> $ids
-	 * @return array<string, string>
-	 */
-	private function loadMerchantIds(array $ids): array
-	{
-		try {
-			$rows = $this->connection->rows(['c' => 'eshop_customer'], ['id' => 'c.uuid', 'merchant' => 'c.fk_merchant'])
-				->where('c.uuid', $ids)
-				->where('c.fk_merchant IS NOT NULL');
-
-			$map = [];
-
-			foreach ($rows as $row) {
-				$map[$row->id] = $row->merchant;
-			}
-
-			return $map;
-		} catch (\Throwable) {
-			return [];
-		}
 	}
 
 	/**

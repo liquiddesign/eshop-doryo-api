@@ -11,6 +11,7 @@ use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
 use DoryoApi\Mapper\ItemMapper;
 use DoryoApi\Mapper\OrderMapper;
+use DoryoApi\Merchants;
 use DoryoApi\Support\Dates;
 use DoryoApi\Support\OrderStates;
 use DoryoApi\Support\OrderTotals;
@@ -33,6 +34,7 @@ final class OrdersEndpoint extends BaseEndpoint
 		Codebooks $codebooks,
 		private OrderMapper $mapper,
 		private ItemMapper $itemMapper,
+		private Merchants $merchants,
 	) {
 		parent::__construct($connection, $config, $codebooks);
 	}
@@ -128,7 +130,19 @@ final class OrdersEndpoint extends BaseEndpoint
 		}
 
 		if ($merchantId = $query->string('merchantId')) {
-			$collection->where('purchase.fk_merchant', $merchantId);
+			// Objednávka obchodníka: buď ho nese sama (relace na nákupu), nebo ho má její
+			// zákazník. Shop bez kódu z ERP se ptá jen na relaci a o JOIN navíc nepřijde.
+			$code = $this->merchants->usesCode() ? $this->merchants->codeFor($merchantId) : null;
+
+			if ($code === null) {
+				$collection->where('purchase.fk_merchant', $merchantId);
+			} else {
+				$collection->join(['apiMerchantCustomer' => 'eshop_customer'], 'apiMerchantCustomer.uuid = purchase.fk_customer', [], 'LEFT');
+				$collection->where(
+					'(purchase.fk_merchant = :apiMerchantId OR ' . $this->merchants->codeExpression('apiMerchantCustomer') . ' = :apiMerchantCode)',
+					['apiMerchantId' => $merchantId, 'apiMerchantCode' => $code],
+				);
+			}
 		}
 
 		if ($since = $query->dateTime('since')) {
@@ -292,6 +306,10 @@ final class OrdersEndpoint extends BaseEndpoint
 		$payments = $this->loadPayments($orderIds, $suffix);
 		$deliveries = $this->loadDeliveries($orderIds, $suffix);
 		$invoices = $this->loadInvoiceIds($orderIds);
+		// Jen u shopů s kódem z ERP. `purchase.fk_merchant` totiž znamená „obchodník tu
+		// objednávku pořídil za zákazníka", kdežto obchodník u zákazníka je jeho správce —
+		// slévat to všude by shopům, které relaci opravdu používají, tiše přepsalo význam pole.
+		$merchants = $this->merchants->usesCode() ? $this->merchants->forCustomers($this->collectIds($purchases, 'customer')) : [];
 
 		$extras = [];
 
@@ -316,6 +334,7 @@ final class OrdersEndpoint extends BaseEndpoint
 				'deliveryType' => $delivery?->typeName ?: null,
 				'trackingUrl' => $delivery !== null ? self::trackingUrl($delivery) : null,
 				'invoiceIds' => $invoices[$id] ?? [],
+				'merchantId' => self::idValue($purchase, 'merchant') ?? $merchants[(string) self::idValue($purchase, 'customer')] ?? null,
 				'itemCount' => $itemCounts[(string) self::idValue($order, 'purchase')] ?? 0,
 				'items' => null,
 			];
