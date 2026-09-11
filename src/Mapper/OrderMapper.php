@@ -41,6 +41,7 @@ final class OrderMapper extends Mapper
 	 *     deliveryType?: string|null,
 	 *     trackingUrl?: string|null,
 	 *     invoiceIds?: array<string>,
+	 *     merchantId?: string|null,
 	 *     itemCount?: int|null,
 	 *     items?: array<array<string, mixed>>|null
 	 * } $extras
@@ -81,7 +82,9 @@ final class OrderMapper extends Mapper
 			'eshop' => [
 				'source' => self::source($purchase),
 				'state' => self::shopState($order),
-				'merchantId' => $this->relationId($purchase, 'merchant'),
+				// Nákup obchodníka nese jen tam, kde ho shop na objednávku píše. Kde ho vede
+				// u zákazníka (kód z ERP), dosadí ho endpoint; viz DoryoApi\Merchants.
+				'merchantId' => $extras['merchantId'] ?? $this->relationId($purchase, 'merchant'),
 				'trackingUrl' => $extras['trackingUrl'] ?? null,
 				'receivedAt' => Dates::dateTime($order->receivedTs, $this->config->getTimezone()),
 				'completedAt' => Dates::dateTime($order->completedTs, $this->config->getTimezone()),

@@ -470,6 +470,49 @@ check('capabilities zná objednávky', ($capabilities['features']['orders']['ava
 [$status, $suppliers] = request("$baseUrl/v1/suppliers", $token);
 check('dodavatelé', $status === 200 && \is_array($suppliers['items'] ?? null));
 
+echo "\nobchodníci\n";
+[$status, $merchants] = request("$baseUrl/v1/merchants", $token);
+check('obchodníci', $status === 200 && \is_array($merchants['items'] ?? null), "status $status");
+$merchantsFeature = $capabilities['features']['merchants'] ?? null;
+check('capabilities zná obchodníky', \is_array($merchantsFeature) && \is_bool($merchantsFeature['available'] ?? null));
+
+// Prázdná vazba je legitimní stav (shop ji drží v ERP) — hlídá se, že se o ní NEMLČÍ.
+// Vadné by bylo tvrdit „available: true" a přitom nemít na kom, nebo naopak.
+if (($merchantsFeature['available'] ?? false) === true) {
+	$merchant = $merchants['items'][0] ?? null;
+	check('obchodník má id a jméno', \is_array($merchant) && isset($merchant['id'], $merchant['name']));
+	check('obchodník nese počet zákazníků', \is_int($merchant['customers'] ?? null));
+	check('capabilities říká, čím je vazba držená', \in_array($merchantsFeature['link'] ?? null, ['relation', 'relation+code'], true));
+
+	if (isset($merchant['id'])) {
+		[$status, $ofMerchant] = request("$baseUrl/v1/customers?merchantId=" . \rawurlencode($merchant['id']) . '&limit=5', $token);
+		check('filtr zákazníků podle obchodníka projde', $status === 200 && \is_array($ofMerchant['items'] ?? null), "status $status");
+		check(
+			'obchodník se zákazníky nějaké vrátí',
+			($merchant['customers'] ?? 0) === 0 || ($ofMerchant['items'] ?? []) !== [],
+			'má ' . ($merchant['customers'] ?? 0) . ' zákazníků, filtr nevrátil nic',
+		);
+
+		[$status, $ordersOfMerchant] = request("$baseUrl/v1/orders?merchantId=" . \rawurlencode($merchant['id']) . "&limit=5$ordersWindow", $token);
+		check('filtr objednávek podle obchodníka projde', $status === 200 && \is_array($ordersOfMerchant['items'] ?? null), "status $status");
+	}
+
+	if (isset($merchant['email'])) {
+		[$status, $byEmail] = request("$baseUrl/v1/merchants?email=" . \rawurlencode($merchant['email']), $token);
+		check('obchodník se najde podle e-mailu', $status === 200 && ($byEmail['items'][0]['id'] ?? null) === $merchant['id']);
+	}
+
+	[$status, $sales] = request("$baseUrl/v1/reports/sales?groupBy=merchant$reportWindow", $token);
+	$keys = \array_column($sales['items'] ?? [], 'key');
+	check(
+		'tržby po obchodnících nejsou jen „bez obchodníka"',
+		$status === 200 && ($keys === [] || $keys !== ['bez obchodníka']),
+		'klíče: ' . \implode(', ', $keys),
+	);
+} else {
+	check('capabilities u chybějící vazby vysvětlí proč', \str_contains((string) ($merchantsFeature['detail'] ?? ''), 'bez obchodníka'));
+}
+
 if (isset($order['id'])) {
 	[$status, $history] = request("$baseUrl/v1/orders/" . \rawurlencode($order['id']) . '/history?limit=5', $token);
 	check('historie objednávky', $status === 200 && \is_array($history['items'] ?? null));
@@ -606,7 +649,7 @@ $expectedPaths = [
 	'/v1/reports/customers', '/v1/reports/receivables', '/v1/reports/churn', '/v1/reports/replenishment',
 	'/v1/meta/capabilities', '/v1/suppliers', '/v1/orders/{id}/history', '/v1/orders/{id}/shipments',
 	'/v1/products/{id}/reviews', '/v1/reports/fulfillment', '/v1/reports/reviews', '/v1/reports/imports',
-	'/v1/reports/catalog-health', '/v1/reports/unlinked', '/v1/reports/abandoned-carts',
+	'/v1/reports/catalog-health', '/v1/reports/unlinked', '/v1/reports/abandoned-carts', '/v1/merchants',
 ];
 $missingPaths = \array_diff($expectedPaths, \array_keys($spec['paths'] ?? []));
 check('openapi popisuje všechny domény', $missingPaths === [], 'chybí ' . \implode(', ', $missingPaths));

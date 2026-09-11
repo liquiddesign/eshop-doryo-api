@@ -35,6 +35,10 @@ final class Config
 	 * @param bool $customerPricesEnabled Smí API vydat ceny konkrétního zákazníka (viz spec §11)
 	 * @param string|null $userfilesDir Adresář s obrázky produktů — kvůli diagnostice médií
 	 * @param array<string> $imageSizes Velikosti, ve kterých se obrázky generují
+	 * @param string|null $merchantCodeColumn Sloupec `eshop_customer`, ve kterém shop veze kód
+	 *     obchodníka z ERP (třeba `dealerCode`); null = obchodník je jen relací fk_merchant
+	 * @param string $merchantCodeSeparator Kód obchodníka je část hodnoty před tímhle oddělovačem
+	 *     (K2 posílá `11_01-10`); prázdný řetězec = celá hodnota je kód
 	 */
 	public function __construct(
 		private string $prefix = 'doryo-api',
@@ -57,6 +61,8 @@ final class Config
 		private bool $customerPricesEnabled = false,
 		private ?string $userfilesDir = null,
 		private array $imageSizes = ['origin', 'detail', 'thumb'],
+		private ?string $merchantCodeColumn = null,
+		private string $merchantCodeSeparator = '_',
 		private int $defaultLimit = 200,
 		private int $maxLimit = 1000,
 		private int $defaultWindowMonths = 6,
@@ -180,6 +186,31 @@ final class Config
 	public function getImageSizes(): array
 	{
 		return $this->imageSizes;
+	}
+
+	/**
+	 * Sloupec zákazníka s kódem obchodníka z ERP, nebo `null`.
+	 *
+	 * Hodnota jde do SQL natvrdo (vázat se nedá, používá se i v JOIN ON), takže se tady drží
+	 * na tvaru identifikátoru. Cokoli jiného je překlep v NEONu a bere se, jako by nastavený
+	 * nebyl — rozbitý filtr je lepší než dotaz, který si shop sám složí z konfigurace.
+	 */
+	public function getMerchantCodeColumn(): ?string
+	{
+		if ($this->merchantCodeColumn === null || !\preg_match('~^[A-Za-z_][A-Za-z0-9_]{0,63}$~', $this->merchantCodeColumn)) {
+			return null;
+		}
+
+		return $this->merchantCodeColumn;
+	}
+
+	/**
+	 * Oddělovač, za kterým kód obchodníka v hodnotě končí. Prázdný = celá hodnota je kód.
+	 * Stejně jako sloupec projde whitelistem znaků — jde to do SQL bez vázání.
+	 */
+	public function getMerchantCodeSeparator(): string
+	{
+		return \preg_match('~^[A-Za-z0-9_\-.:|/#]{1,4}$~', $this->merchantCodeSeparator) === 1 ? $this->merchantCodeSeparator : '';
 	}
 
 	public function getDefaultLimit(): int

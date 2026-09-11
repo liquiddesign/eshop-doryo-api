@@ -25,6 +25,7 @@ use DoryoApi\Mapper\InvoiceMapper;
 use DoryoApi\Mapper\ItemMapper;
 use DoryoApi\Mapper\OrderMapper;
 use DoryoApi\Mapper\ProductMapper;
+use DoryoApi\Merchants;
 use DoryoApi\OpenApi\Specification;
 use DoryoApi\Router;
 use Nette\Application\Routers\RouteList;
@@ -70,6 +71,10 @@ final class DoryoApiDI extends CompilerExtension
 			'invoicePaymentTracked' => Expect::bool(true),
 			// ceny konkrétního zákazníka jsou vědomá výjimka — ve výchozím stavu vypnuté
 			'customerPrices' => Expect::bool(false),
+			// obchodník u zákazníka: shopy, které zákazníky importují z ERP, nevyplňují relaci
+			// fk_merchant a vezou kód obchodníka ve vlastním sloupci (Levior: dealerCode z K2)
+			'merchantCodeColumn' => Expect::string()->nullable(),
+			'merchantCodeSeparator' => Expect::string('_'),
 			'userfilesDir' => Expect::string()->nullable(),
 			'imageSizes' => Expect::listOf('string')->default(['origin', 'detail', 'thumb'])->mergeDefaults(false),
 			'logDir' => Expect::string()->nullable(),
@@ -99,11 +104,14 @@ final class DoryoApiDI extends CompilerExtension
 				'orderStates' => $config->orderStates,
 				'invoicePaymentTracked' => $config->invoicePaymentTracked,
 				'customerPricesEnabled' => $config->customerPrices,
+				'merchantCodeColumn' => $config->merchantCodeColumn,
+				'merchantCodeSeparator' => $config->merchantCodeSeparator,
 				'userfilesDir' => $config->userfilesDir ?? $builder->parameters['wwwDir'] . '/userfiles',
 				'imageSizes' => $config->imageSizes,
 			]);
 
 		$builder->addDefinition($this->prefix('codebooks'))->setFactory(Codebooks::class);
+		$builder->addDefinition($this->prefix('merchants'))->setFactory(Merchants::class);
 		$builder->addDefinition($this->prefix('authenticator'))->setFactory(Authenticator::class);
 		$builder->addDefinition($this->prefix('specification'))->setFactory(Specification::class);
 		$builder->addDefinition($this->prefix('logger'))

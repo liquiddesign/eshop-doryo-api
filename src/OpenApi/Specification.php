@@ -64,7 +64,8 @@ final class Specification
 					$this->param('registrationNo', 'IČO zákazníka (přesná shoda).'),
 					$this->param('email', 'E-mail zákazníka (přesná shoda).'),
 					$this->param('since', 'Jen zákazníci registrovaní od tohoto data (YYYY-MM-DD).'),
-					$this->param('merchantId', 'Jen zákazníci přiřazení tomuto obchodníkovi.'),
+					$this->param('merchantId', 'Jen zákazníci přiřazení tomuto obchodníkovi (id z /v1/merchants). '
+						. 'Shop, který obchodníky nevede, vrátí prázdno — viz capabilities.merchants.'),
 					$this->ref('Limit'),
 					$this->ref('Cursor'),
 				],
@@ -104,7 +105,8 @@ final class Specification
 					$this->param('status', 'Stav objednávky: new, processing, shipped, delivered, cancelled, returned.'),
 					$this->param('customerId', 'Jen objednávky tohoto zákazníka.'),
 					$this->param('registrationNo', 'Jen objednávky s tímto IČO.'),
-					$this->param('merchantId', 'Jen objednávky tohoto obchodníka.'),
+					$this->param('merchantId', 'Jen objednávky tohoto obchodníka (id z /v1/merchants) — jeho vlastní '
+						. 'i objednávky jeho zákazníků. Shop, který obchodníky nevede, vrátí prázdno.'),
 					$this->param('since', 'Jen objednávky vytvořené od tohoto okamžiku (YYYY-MM-DD nebo ISO 8601).'),
 					$this->param('shippingDate', 'Jen objednávky s tímhle požadovaným datem expedice.'),
 					$this->param('exported', 'true/false — jestli je objednávka zaexportovaná do ERP.', 'boolean'),
@@ -189,7 +191,8 @@ final class Specification
 				[
 					$this->param('from', 'Začátek období (YYYY-MM-DD).'),
 					$this->param('to', 'Konec období (YYYY-MM-DD).'),
-					$this->param('groupBy', 'Seskupení: month (výchozí), week, day, merchant, customer, category, producer.'),
+					$this->param('groupBy', 'Seskupení: month (výchozí), week, day, merchant, customer, category, producer. '
+						. 'U merchant si nejdřív ověř capabilities.merchants — bez vazby vyjde jediný řádek „bez obchodníka".'),
 					$this->param('minItems', 'Jen objednávky s aspoň tolika položkami.', 'integer'),
 					$this->param('maxItems', 'Jen objednávky s nejvýš tolika položkami.', 'integer'),
 				],
@@ -342,6 +345,17 @@ final class Specification
 					. '`codePrefix` říká, jestli se kód produktu v katalogu ukazuje bez prefixu.',
 				[],
 				'SupplierList',
+			),
+			'/v1/merchants' => $this->operation(
+				'Obchodníci',
+				'Obchodníci shopu i s počtem zákazníků, kteří na nich visí. Slouží k napárování člověka '
+					. 'na obchodníka (`email`, `q`) — id odsud se pak dává do parametru `merchantId`. '
+					. 'Jestli shop vazbu vůbec vede, řekne `/v1/meta/capabilities` v klíči `merchants`.',
+				[
+					$this->param('email', 'Obchodník s touhle adresou (přesná shoda).'),
+					$this->param('q', 'Hledání ve jméně, e-mailu a kódu.'),
+				],
+				'MerchantList',
 			),
 			'/v1/orders/{id}/history' => $this->operation(
 				'Historie objednávky',
@@ -838,6 +852,17 @@ final class Specification
 					'products' => ['type' => 'integer'],
 				],
 			],
+			'Merchant' => [
+				'type' => 'object',
+				'properties' => [
+					'id' => ['type' => 'string'],
+					'code' => ['type' => 'string', 'nullable' => true, 'description' => 'Kód obchodníka, kterým ho zná ERP.'],
+					'name' => ['type' => 'string'],
+					'email' => ['type' => 'string', 'nullable' => true],
+					'phone' => ['type' => 'string', 'nullable' => true],
+					'customers' => ['type' => 'integer', 'description' => 'Kolik zákazníků na něm visí.'],
+				],
+			],
 			'OrderHistoryItem' => [
 				'type' => 'object',
 				'properties' => [
@@ -927,6 +952,7 @@ final class Specification
 				],
 			],
 			'SupplierList' => $this->listSchema('Supplier'),
+			'MerchantList' => $this->listSchema('Merchant'),
 			'OrderHistoryList' => $this->listSchema('OrderHistoryItem'),
 			'ShipmentList' => $this->listSchema('Shipment'),
 			'ReviewList' => $this->listSchema('Review'),

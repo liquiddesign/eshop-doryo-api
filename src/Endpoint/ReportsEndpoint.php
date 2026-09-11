@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace DoryoApi\Endpoint;
 
+use DoryoApi\Codebooks;
+use DoryoApi\Config;
 use DoryoApi\Http\ApiException;
 use DoryoApi\Http\Cursor;
 use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
+use DoryoApi\Merchants;
 use DoryoApi\Support\Dates;
 use DoryoApi\Support\Money;
 use DoryoApi\Support\OrderTotals;
 use DoryoApi\Support\Sql;
 use Nette\Utils\Arrays;
+use StORM\DIConnection;
 
 /**
  * Souhrny, aby model nemusel stahovat objednávky po jedné. Všechno se počítá v SQL
@@ -24,6 +28,15 @@ final class ReportsEndpoint extends BaseEndpoint
 {
 	private const GROUP_BY = ['month', 'week', 'day', 'merchant', 'customer', 'category', 'producer'];
 	private const CHURN_ORDER = ['revenue', 'lastOrder'];
+
+	public function __construct(
+		DIConnection $connection,
+		Config $config,
+		Codebooks $codebooks,
+		private Merchants $merchants,
+	) {
+		parent::__construct($connection, $config, $codebooks);
+	}
 
 	/**
 	 * @return array<string, string>
@@ -868,7 +881,11 @@ final class ReportsEndpoint extends BaseEndpoint
 			'week' => "DATE_FORMAT(o.createdTs, '%x-W%v')",
 			'day' => 'DATE(o.createdTs)',
 			'customer' => "IFNULL(IFNULL(cu.company, cu.fullname), 'bez zákazníka')",
-			default => "IFNULL(m.fullname, 'bez obchodníka')",
+			// `m2` existuje jen s kódem z ERP a jen ve větvi merchant — proto ta podmínka
+			// musí sedět s podmínkou u joinů níž.
+			default => $this->merchants->usesCode()
+				? "IFNULL(IFNULL(m.fullname, m2.fullname), 'bez obchodníka')"
+				: "IFNULL(m.fullname, 'bez obchodníka')",
 		};
 
 		$currency = $this->config->getCurrency();
@@ -886,7 +903,17 @@ final class ReportsEndpoint extends BaseEndpoint
 			->orderBy(['reportKey' => 'ASC']);
 
 		if ($groupBy === 'merchant') {
-			$rows->join(['m' => 'eshop_merchant'], 'm.uuid = p.fk_merchant');
+			// Obchodník na nákupu, a kde ho shop vede kódem z ERP u zákazníka, i odtud.
+			// Bez té druhé větve vrací report shopům typu Levioru jediný řádek „bez obchodníka",
+			// i když obchodníky mají — a to vypadá jako pravda o tržbách.
+			$rows->join(['m' => 'eshop_merchant'], 'm.uuid = p.fk_merchant', [], 'LEFT');
+
+			$code = $this->merchants->codeExpression('mc');
+
+			if ($code !== null) {
+				$rows->join(['mc' => 'eshop_customer'], 'mc.uuid = p.fk_customer', [], 'LEFT');
+				$rows->join(['m2' => 'eshop_merchant'], "m2.code = $code", [], 'LEFT');
+			}
 		}
 
 		if ($groupBy === 'customer') {
