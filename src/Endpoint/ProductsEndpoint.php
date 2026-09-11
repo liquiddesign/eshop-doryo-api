@@ -62,7 +62,7 @@ final class ProductsEndpoint extends BaseEndpoint
 		}
 
 		if ($code = $query->string('code')) {
-			ProductCode::filter($collection, [$code], $this->connection);
+			ProductCode::filter($collection, [$code], $this->connection, $this->codebooks);
 		}
 
 		if ($ean = $query->string('ean')) {
@@ -85,7 +85,7 @@ final class ProductsEndpoint extends BaseEndpoint
 
 		$this->filterByAttributes($collection, $query, $suffix);
 
-		$this->applyFulltext($collection, $query, ["this.name$suffix", 'this.code', 'this.ean', 'this.mpn']);
+		$this->applyFulltext($collection, $query, $this->productSearchColumns(["this.name$suffix", 'this.ean', 'this.mpn']));
 
 		// `createdTs` je na produktu až od eshopu 2.1; starší shop řadí aspoň stabilně podle PK
 		$order = $hasCreatedTs ? ['this.createdTs' => 'DESC', 'this.uuid' => 'DESC'] : ['this.uuid' => 'DESC'];
@@ -122,7 +122,7 @@ final class ProductsEndpoint extends BaseEndpoint
 	public function detailByCode(array $params, Query $query): Response
 	{
 		$collection = $this->repository(Product::class)->many()->where($this->productNotDeleted());
-		ProductCode::filter($collection, [$params['code']], $this->connection);
+		ProductCode::filter($collection, [$params['code']], $this->connection, $this->codebooks);
 		$id = $collection->firstValue('this.uuid');
 
 		// firstValue() vrací při prázdném výsledku false, ne null — proto negace, ne === null

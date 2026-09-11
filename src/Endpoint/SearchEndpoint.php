@@ -73,7 +73,7 @@ final class SearchEndpoint extends BaseEndpoint
 		return match ($type) {
 			'products' => $this->collect(
 				'products',
-				['this.code', 'this.ean', "this.name$suffix", 'this.mpn'],
+				$this->productSearchColumns(['this.ean', "this.name$suffix", 'this.mpn']),
 				$terms,
 				$limit,
 				\Eshop\DB\Product::class,

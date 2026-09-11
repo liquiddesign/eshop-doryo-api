@@ -151,7 +151,7 @@ final class Specification
 				'Produkty s cenou z veřejného ceníku a se skladovou dostupností.',
 				[
 					$this->ref('Q'),
-					$this->param('code', 'Kód produktu (přesná shoda).'),
+					$this->param('code', 'Kód produktu (přesná shoda); podkód se bere s vodicí nulou i bez ní, tedy 37214.01 i 37214.1.'),
 					$this->param('ean', 'EAN produktu (přesná shoda).'),
 					$this->param('category', 'Kategorie — id, kód nebo název; zahrne i podkategorie.'),
 					$this->param('since', 'Jen produkty založené od tohoto data.'),

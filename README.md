@@ -94,7 +94,7 @@ Zbytek je na `/{prefix}/v1/…`, seznamy v obálce `{ items, nextCursor, hasMore
 
 ## Aby odpověď nešla přečíst špatně
 
-Odpověď čte model, ne člověk, takže dvě věci nejdou nechat na domýšlení:
+Odpověď čte model, ne člověk, takže tři věci nejdou nechat na domýšlení:
 
 **Prázdný seznam řekne, jestli za tím není jen výchozí okno.** Seznamy a reporty bez zadaného
 rozsahu berou posledních `defaultWindowMonths` měsíců. Když se okno vzalo z výchozí hodnoty,
@@ -122,6 +122,15 @@ vyjmenuje, co daný endpoint zná:
 Neznámý parametr zakaznik. Tenhle endpoint zná: createdFrom, createdTo, cursor, customerId,
 limit, q, status… Úplný popis je v /openapi.json.
 ```
+
+**Kód produktu se hledá ve všech podobách, v jakých ho člověk píše.** Shop má kód rozdělený
+na `code` a `subCode` a každý je skládá jinak: v databázi je `37214` + `1`, na dokladu z K2
+`37214.01`, v jiném shopu `37214.1`. Kdyby se filtry ptaly jen na `code`, kód z faktury by
+nenašel nic. Hledá se proto přes syrový kód, kód s podkódem doplněným na dvě místa i bez
+doplnění, kód dodavatele a katalogovou podobu bez dodavatelského prefixu — a zadaná hodnota
+se sama roztáhne na podobu s vodicí nulou i bez ní. Když si shop vede celý kód ve vlastním
+sloupci `eshop_product.fullCode` (Levior), bere se i ten. Platí to pro `code`/`codes` i pro
+fulltext `q` a `/v1/search`.
 
 ## Nejdřív se zeptej, co shop vede
 

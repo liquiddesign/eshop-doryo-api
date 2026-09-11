@@ -18,7 +18,7 @@ final class Config
 	 * Verze balíku, když se nedá zjistit z Composeru (balík nasazený mimo composer install).
 	 * Skutečná verze se bere z tagu přes {@see version()}, aby s vydáním nedriftovala.
 	 */
-	public const VERSION = '1.0.1';
+	public const VERSION = '1.5.0';
 
 	/** Normalizované stavy objednávek, které API vrací v poli `status`. */
 	public const ORDER_STATUSES = ['new', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];

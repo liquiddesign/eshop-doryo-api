@@ -10,6 +10,7 @@ use DoryoApi\Http\ApiException;
 use DoryoApi\Http\Cursor;
 use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
+use DoryoApi\Support\ProductCode;
 use DoryoApi\Support\Sql;
 use StORM\Collection;
 use StORM\DIConnection;
@@ -83,6 +84,20 @@ abstract class BaseEndpoint implements Endpoint
 		}
 
 		$collection->where($condition[0], $condition[1]);
+	}
+
+	/**
+	 * Sloupce, ve kterých fulltext `q` hledá produkt.
+	 *
+	 * Kód se nepřidává jako `this.code`, ale ve všech podobách, v jakých ho člověk píše —
+	 * s podkódem i s vodicí nulou v něm (viz `ProductCode`). Bez toho `q=37214.01` nenajde
+	 * produkt, který má v databázi kód `37214` a podkód `1`.
+	 * @param array<string> $columns sloupce mimo kód (název, EAN, MPN)
+	 * @return array<string>
+	 */
+	protected function productSearchColumns(array $columns): array
+	{
+		return \array_merge($columns, ProductCode::codeExpressions($this->codebooks));
 	}
 
 	/**

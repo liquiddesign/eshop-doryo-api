@@ -55,7 +55,7 @@ final class StockEndpoint extends BaseEndpoint
 		}
 
 		if ($code !== null) {
-			ProductCode::filter($collection, [$code], $this->connection);
+			ProductCode::filter($collection, [$code], $this->connection, $this->codebooks);
 		}
 
 		if ($ean !== null) {
@@ -66,7 +66,7 @@ final class StockEndpoint extends BaseEndpoint
 			$collection->where('this.uuid', $id);
 		}
 
-		$this->applyFulltext($collection, $query, ["this.name$suffix", 'this.code', 'this.ean', 'this.mpn']);
+		$this->applyFulltext($collection, $query, $this->productSearchColumns(["this.name$suffix", 'this.ean', 'this.mpn']));
 
 		$page = $this->paginate($collection->orderBy(['this.code' => 'ASC']), $query);
 		$stock = $this->products->loadStock(\array_keys($page['rows']));

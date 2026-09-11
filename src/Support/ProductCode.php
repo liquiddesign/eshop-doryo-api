@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace DoryoApi\Support;
 
+use DoryoApi\Codebooks;
 use StORM\Collection;
 use StORM\Connection;
 
@@ -17,6 +18,13 @@ use StORM\Connection;
  *
  * Proto se filtruje přes výraz, který tu logiku opakuje v SQL, a vedle toho i přes syrový kód,
  * kód s podkódem a kód dodavatele — člověk diktuje, co má na papíře.
+ *
+ * **Podkód se píše s vodicí nulou.** Shopy tahající zboží z K2 mají kód rozdělený (`37214` +
+ * podkód `1`), ale člověk i doklad nesou `37214.01` — prosté `CONCAT(code, '.', subCode)`
+ * dá `37214.1` a takový dotaz nenajde nic. Porovnává se proto obojí, doplněné na dvě místa
+ * (`LPAD`) i syrové, a zadaný kód se roztáhne na obě podoby — vodicí nula může chybět na
+ * kterékoli straně. Když shop vede celý kód ve vlastním sloupci `fullCode` (Levior), bere
+ * se i ten.
  */
 final class ProductCode
 {
@@ -27,7 +35,7 @@ final class ProductCode
 	 * @param \StORM\Collection<\Eshop\DB\Product> $collection
 	 * @param array<string> $codes
 	 */
-	public static function filter(Collection $collection, array $codes, Connection $connection): void
+	public static function filter(Collection $collection, array $codes, Connection $connection, ?Codebooks $codebooks = null): void
 	{
 		if (!$codes) {
 			return;
@@ -35,15 +43,64 @@ final class ProductCode
 
 		self::joinSupplier($collection);
 
-		$in = Sql::inList($connection, $codes);
-		$display = self::displayExpression();
+		$in = Sql::inList($connection, self::variants($codes));
 
-		$collection->where(
-			"this.code IN ($in)
-			OR CONCAT(this.code, '.', this.subCode) IN ($in)
-			OR this.supplierCode IN ($in)
-			OR $display IN ($in)",
-		);
+		$expressions = self::codeExpressions($codebooks);
+		$expressions[] = 'this.supplierCode';
+		$expressions[] = self::displayExpression();
+
+		$conditions = \array_map(static fn (string $expression): string => "$expression IN ($in)", $expressions);
+
+		$collection->where('(' . \implode(' OR ', $conditions) . ')');
+	}
+
+	/**
+	 * Výrazy, ve kterých se dá kód hledat — pro přesnou shodu i pro fulltext `q`.
+	 *
+	 * Bez dodavatelské části, takže se kvůli nim nemusí joinovat `eshop_supplier`.
+	 * @return array<string>
+	 */
+	public static function codeExpressions(?Codebooks $codebooks = null, string $alias = 'this'): array
+	{
+		$sub = "NULLIF($alias.subCode, '')";
+
+		$expressions = [
+			"$alias.code",
+			"CONCAT($alias.code, '.', $sub)",
+			"CONCAT($alias.code, '.', LPAD($sub, 2, '0'))",
+		];
+
+		if ($codebooks !== null && $codebooks->hasColumn('eshop_product', 'fullCode')) {
+			$expressions[] = "$alias.fullCode";
+		}
+
+		return $expressions;
+	}
+
+	/**
+	 * Podoby zadaného kódu, které se ještě mají zkusit: podkód s vodicí nulou i bez ní.
+	 * @param array<string> $codes
+	 * @return array<string>
+	 */
+	public static function variants(array $codes): array
+	{
+		$out = [];
+
+		foreach ($codes as $code) {
+			$out[$code] = $code;
+
+			if (!\preg_match('~^(.+)\.(\d+)$~', $code, $match)) {
+				continue;
+			}
+
+			$bare = \ltrim($match[2], '0') ?: '0';
+			$padded = \str_pad($bare, 2, '0', \STR_PAD_LEFT);
+
+			$out["$match[1].$bare"] = "$match[1].$bare";
+			$out["$match[1].$padded"] = "$match[1].$padded";
+		}
+
+		return \array_values($out);
 	}
 
 	/**
