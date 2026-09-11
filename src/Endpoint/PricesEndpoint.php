@@ -228,13 +228,13 @@ final class PricesEndpoint extends BaseEndpoint
 			$codes[] = $code;
 		}
 
-		ProductCode::filter($collection, $codes, $this->connection);
+		ProductCode::filter($collection, $codes, $this->connection, $this->codebooks);
 
 		if ($ean = $query->string('ean')) {
 			$collection->where('this.ean', $ean);
 		}
 
-		$this->applyFulltext($collection, $query, ["this.name$suffix", 'this.code', 'this.ean']);
+		$this->applyFulltext($collection, $query, $this->productSearchColumns(["this.name$suffix", 'this.ean']));
 
 		$page = $this->paginate($collection->orderBy(['this.code' => 'ASC']), $query);
 

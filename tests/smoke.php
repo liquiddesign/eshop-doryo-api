@@ -290,6 +290,44 @@ if ($productCode !== null) {
 	check('detail produktu podle kódu', $status === 200 && ($byCode['code'] ?? null) === $productCode);
 }
 
+// Podkód píše každý jinak: shop z K2 ho v katalogu ukazuje jako `37214.01`, v databázi má
+// `37214` + `1`. Kód se proto musí dovolat i ve druhé podobě, než v jaké ho API vydalo —
+// jinak model dostane kód, který sám nedohledá.
+$sPodkodem = null;
+
+foreach ($products['items'] ?? [] as $kandidat) {
+	if (!\preg_match('~^(.+)\.(\d+)$~', (string) ($kandidat['code'] ?? ''), $shoda)) {
+		continue;
+	}
+
+	$bezNuly = \ltrim($shoda[2], '0') ?: '0';
+	// jednomístný podkód se zkusí s nulou, vícemístný bez ní; dvoumístný `12` druhou podobu nemá
+	$druhaPodoba = $bezNuly === $shoda[2] ? $shoda[1] . '.' . \str_pad($bezNuly, 2, '0', \STR_PAD_LEFT) : "$shoda[1].$bezNuly";
+
+	if ($druhaPodoba !== $kandidat['code']) {
+		$sPodkodem = [$kandidat, $druhaPodoba];
+
+		break;
+	}
+}
+
+if ($sPodkodem !== null) {
+	[$kandidat, $druhaPodoba] = $sPodkodem;
+
+	[$status, $jinak] = request("$baseUrl/v1/products/by-code/" . \rawurlencode($druhaPodoba), $token);
+	check(
+		"kód s podkódem se najde i jako $druhaPodoba",
+		$status === 200 && ($jinak['id'] ?? null) === ($kandidat['id'] ?? null),
+		"dostal jsem $status pro $druhaPodoba (kód z katalogu je {$kandidat['code']})",
+	);
+
+	[$status, $nalezeno] = request("$baseUrl/v1/search?q=" . \rawurlencode($druhaPodoba), $token);
+	check(
+		"hledání najde produkt i podle $druhaPodoba",
+		$status === 200 && \array_filter($nalezeno['items'] ?? [], static fn (array $hit): bool => $hit['type'] === 'products'),
+	);
+}
+
 [$status, $pricelists] = request("$baseUrl/v1/pricelists?limit=200", $token);
 check('seznam ceníků', $status === 200 && \is_array($pricelists['items'] ?? null));
 
