@@ -6,8 +6,8 @@ namespace DoryoApi;
 
 /**
  * Log volání API do vlastního souboru. Není to audit (ten má Doryo na své straně),
- * je to na ladění a na hlídání limitů — proto cesta, parametry, počet položek a čas.
- * Token se do logu nikdy nepíše.
+ * je to na ladění a na hlídání limitů — proto metoda, cesta, parametry, počet položek a čas.
+ * Token ani obsah těla se do logu nikdy nepíše.
  */
 final class Logger
 {
@@ -16,18 +16,29 @@ final class Logger
 	}
 
 	/**
+	 * U zápisu se loguje jen velikost těla, nikdy jeho obsah — v těle jedou hodnoty polí
+	 * administrace (ceny, e-maily, poznámky) a log není místo, kde mají ležet.
 	 * @param array<string, mixed> $params
 	 */
-	public function log(string $path, array $params, int $status, ?int $items, float $milliseconds): void
-	{
+	public function log(
+		string $path,
+		array $params,
+		int $status,
+		?int $items,
+		float $milliseconds,
+		string $method = 'GET',
+		?int $bodyBytes = null
+	): void {
 		unset($params['token']);
 
 		$line = \json_encode([
 			'ts' => (new \DateTimeImmutable())->format('c'),
+			'method' => $method,
 			'path' => $path,
 			'params' => $params,
 			'status' => $status,
 			'items' => $items,
+			'bodyBytes' => $bodyBytes,
 			'ms' => \round($milliseconds, 1),
 		], \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES);
 
