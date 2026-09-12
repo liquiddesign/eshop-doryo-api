@@ -47,6 +47,15 @@ final class MetaEndpoint extends BaseEndpoint
 			]);
 		}
 
+		// Pro provozovatele, ne pro model: chybějící index zpomaluje každé okno podle data a v kódu
+		// balíku se to nenajde — tady je to vidět jedním voláním.
+		$warnings = [];
+
+		if (!$this->codebooks->hasIndex('eshop_order', 'createdTs')) {
+			$warnings[] = 'Chybí index na eshop_order(createdTs): seznamy a reporty s oknem podle data procházejí '
+				. 'celou tabulku objednávek. Založ ho v projektu shopu — README balíku, oddíl „Indexy".';
+		}
+
 		return new Response([
 			'status' => 'ok',
 			'service' => 'eshop-doryo-api',
@@ -58,6 +67,7 @@ final class MetaEndpoint extends BaseEndpoint
 				'languages' => $this->config->getLanguages(),
 			],
 			'eshopVersion' => $this->config->getEshopVersion(),
+			'warnings' => $warnings,
 			'now' => $now,
 		]);
 	}

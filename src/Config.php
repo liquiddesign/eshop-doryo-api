@@ -18,7 +18,7 @@ final class Config
 	 * Verze balíku, když se nedá zjistit z Composeru (balík nasazený mimo composer install).
 	 * Skutečná verze se bere z tagu přes {@see version()}, aby s vydáním nedriftovala.
 	 */
-	public const VERSION = '1.6.0';
+	public const VERSION = '1.7.0';
 
 	/** Normalizované stavy objednávek, které API vrací v poli `status`. */
 	public const ORDER_STATUSES = ['new', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
@@ -35,6 +35,10 @@ final class Config
 	 * @param bool $customerPricesEnabled Smí API vydat ceny konkrétního zákazníka (viz spec §11)
 	 * @param string|null $userfilesDir Adresář s obrázky produktů — kvůli diagnostice médií
 	 * @param array<string> $imageSizes Velikosti, ve kterých se obrázky generují
+	 * @param int $defaultLimit Kolik záznamů vrátí seznam nebo report bez `limit`
+	 * @param int $maxLimit Strop parametru `limit`
+	 * @param int $defaultWindowMonths Výchozí okno seznamů a reportů bez data; velký shop si ho zkrátí
+	 * @param int $maxWindowMonths Nejdelší okno, které API přijme
 	 */
 	public function __construct(
 		private string $prefix = 'doryo-api',

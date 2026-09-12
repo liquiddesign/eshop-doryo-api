@@ -72,8 +72,16 @@ final class StockEndpoint extends BaseEndpoint
 		$stock = $this->products->loadStock(\array_keys($page['rows']));
 
 		$items = [];
+		$untracked = 0;
 
 		foreach ($page['rows'] as $productId => $product) {
+			// Produkt bez jediného řádku v `eshop_amount` nemá zásobu nulovou, ale nevedenou —
+			// dřív se vracela nula a model hlásil „vyprodáno" u nejprodávanějšího zboží shopu,
+			// který sklad vede jen v ERP. Nula zůstává jen tam, kde ji sklad opravdu eviduje.
+			if (!isset($stock[$productId])) {
+				$untracked++;
+			}
+
 			$items[] = [
 				'productId' => $productId,
 				'code' => $product->getFullCode(),
@@ -81,12 +89,13 @@ final class StockEndpoint extends BaseEndpoint
 				'name' => $product->name,
 				'unit' => $product->unit ?: null,
 				'stock' => $stock[$productId] ?? [
-					'available' => 0,
-					'reserved' => 0,
-					'onOrder' => 0,
+					'available' => null,
+					'reserved' => null,
+					'onOrder' => null,
 					'unit' => null,
 					'updatedAt' => null,
 					'byStore' => [],
+					'tracked' => false,
 				],
 			];
 		}
@@ -94,7 +103,11 @@ final class StockEndpoint extends BaseEndpoint
 		$response = Response::list($items, $page['nextCursor']);
 
 		if ($items) {
-			return $response;
+			return $untracked === 0 ? $response : $response->withExtra(['note' => \sprintf(
+				'U %d z položek shop zásobu nevede (tracked: false, available: null) — to není vyprodáno, '
+					. 'sklad se u nich řídí jinde (typicky v ERP).',
+				$untracked,
+			)]);
 		}
 
 		// „Nemáme skladem" a „takový kód neznáme" vypadají obojí jako prázdný seznam, ale vedou

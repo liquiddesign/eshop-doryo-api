@@ -174,6 +174,7 @@ final class ProductsEndpoint extends BaseEndpoint
 				'unit' => null,
 				'updatedAt' => null,
 				'byStore' => [],
+				'tracked' => true,
 			];
 
 			$map[$id]['available'] += (int) $row->available;

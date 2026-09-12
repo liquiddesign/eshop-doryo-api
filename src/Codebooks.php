@@ -30,8 +30,42 @@ final class Codebooks
 	/** @var array<string, array<string, true>> sloupce per tabulka, načtené líně */
 	private array $tableColumns = [];
 
+	/** @var array<string, array<string, true>> první sloupce indexů per tabulka, načtené líně */
+	private array $tableIndexes = [];
+
 	public function __construct(private DIConnection $connection, private Config $config)
 	{
+	}
+
+	/**
+	 * Začíná na téhle tabulce některý index tímhle sloupcem?
+	 *
+	 * Seznamy a reporty jdou oknem na `eshop_order.createdTs` a eshop na něm index nemá. Balík
+	 * do schématu nesahá (to je věc shopu), ale umí říct, že chybí — health to hlásí, ať se
+	 * pomalý report nehledá v kódu. Bez přístupu k information_schema se hlásí „chybí".
+	 */
+	public function hasIndex(string $table, string $column): bool
+	{
+		if (!isset($this->tableIndexes[$table])) {
+			$names = [];
+
+			try {
+				$rows = $this->connection->rows(['s' => 'information_schema.STATISTICS'], ['name' => 's.COLUMN_NAME'])
+					->where('s.TABLE_SCHEMA = DATABASE()')
+					->where('s.TABLE_NAME', $table)
+					->where('s.SEQ_IN_INDEX = 1');
+
+				foreach ($rows as $row) {
+					$names[$row->name] = true;
+				}
+			} catch (\Throwable) {
+				$names = [];
+			}
+
+			$this->tableIndexes[$table] = $names;
+		}
+
+		return isset($this->tableIndexes[$table][$column]);
 	}
 
 	/**

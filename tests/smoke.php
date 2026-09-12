@@ -402,6 +402,15 @@ foreach (['customers', 'receivables', 'churn', 'replenishment'] as $report) {
 	check("report $report", $status === 200 && \is_array($data['items'] ?? null), "status $status");
 }
 
+// Pokrytí zásob: nevedená zásoba je null se stockTracked=false, ne nula — jinak je nejprodávanější
+// zboží shopu, který sklad vede v ERP, „vyprodané". Neznámý sklad je 400, ne prázdný seznam.
+[$status, $replenishment] = request("$baseUrl/v1/reports/replenishment?limit=3", $token);
+$dochazi = $replenishment['items'][0] ?? null;
+check('replenishment nese available, stockTracked a coverageDays', $dochazi === null || (\array_key_exists('available', $dochazi) && \array_key_exists('stockTracked', $dochazi) && \array_key_exists('coverageDays', $dochazi)));
+check('replenishment: nevedená zásoba je null, ne nula', $dochazi === null || $dochazi['stockTracked'] === ($dochazi['available'] !== null));
+[$status] = request("$baseUrl/v1/reports/replenishment?store=nesmysl-neexistuje&limit=1", $token);
+check('replenishment s neznámým skladem je 400', $status === 400, "dostal jsem $status");
+
 // Churn je segment pro rozesílku, takže se z něj musí dát složit seznam příjemců rovnou —
 // bez doptávání na /v1/customers/{id} u každého zvlášť. K tomu stránkování a řazení.
 echo "\nchurn — kontakt, stránkování a řazení\n";

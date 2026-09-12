@@ -68,6 +68,10 @@ Dvě věci, na které se naráží na klasickém serveru:
 | `orderStates` | viz níž | mapa normalizovaný stav → stavy shopu |
 | `invoicePaymentTracked` | `true` | eviduje shop úhrady faktur? kde je vede ERP, dej `false` |
 | `customerPrices` | `false` | vydávat ceny konkrétního zákazníka (vědomá výjimka, viz níž) |
+| `defaultLimit` | `200` | kolik záznamů vrátí seznam nebo report bez `limit` |
+| `maxLimit` | `1000` | strop parametru `limit` |
+| `defaultWindowMonths` | `6` | výchozí okno seznamů a reportů bez data; shop se statisíci objednávek si ho zkrátí |
+| `maxWindowMonths` | `24` | nejdelší okno, které API přijme |
 | `extensions` | `[]` | služby implementující `DoryoApi\Extension\DoryoApiExtension` |
 
 Výchozí mapa stavů je `new: [open]`, `processing: [received]`, `delivered: [finished]`,
@@ -173,6 +177,24 @@ doryoApi:
 
 Rozšíření smí přidávat **jen do klíče `eshop`** — standardní pole mapper po zavolání vrátí zpátky,
 aby se nedal rozbít kontrakt s Doryo.
+
+## Indexy
+
+Seznamy i reporty jdou oknem podle data objednávky a eshop na `eshop_order.createdTs` index
+nemá. Bez něj každé volání projde celou tabulku objednávek; na shopu se statisíci objednávek
+to jsou vteřiny navíc u každého reportu. Balík do schématu nesahá — index založ v projektu
+shopu (migrace):
+
+```sql
+ALTER TABLE eshop_order ADD INDEX eshop_order_createdTs (createdTs);
+```
+
+Že chybí, hlásí `GET /v1/meta/health` v poli `warnings`.
+
+Reporty nad položkami (`top-products`, `replenishment`, `sales?groupBy=category|producer`) jdou
+jedním dotazem vedeným od objednávek (`STRAIGHT_JOIN`), ne přes seznam id nákupů v PHP — ten
+na čtyřiceti tisících objednávek za půl roku trval déle, než klient čekal. I tak platí: bez
+`from` a `to` se počítá celé výchozí okno; kdo se ptá na poslední týdny, má je zadat.
 
 ## Vlastní endpointy z projektu
 
