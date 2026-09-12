@@ -25,9 +25,14 @@ final class Query
 
 	/**
 	 * @param array<string, mixed> $params
+	 * @param array<mixed>|null $body Tělo požadavku u zápisových metod; u GET je null
 	 */
-	public function __construct(private array $params, private Config $config)
-	{
+	public function __construct(
+		private array $params,
+		private Config $config,
+		private ?array $body = null,
+		private string $method = 'GET',
+	) {
 		// limit a cursor zná každý endpoint. Tam, kde se nestránkuje, jsou bez efektu —
 		// ale odmítnout je by byla past: jsou to nejběžnější parametry celého API a volající
 		// je připíše ze zvyku. Tiché ignorování je nebezpečné u FILTRU, protože vrátí
@@ -35,6 +40,24 @@ final class Query
 		// úplný výsledek, tedy odpověď, ze které se špatný závěr udělat nedá.
 		$this->known['limit'] = true;
 		$this->known['cursor'] = true;
+	}
+
+	/**
+	 * Tělo požadavku tak, jak přišlo. Díky tomu zůstává signatura obsluh `method($params, $query)`
+	 * stejná pro čtení i pro zápis.
+	 * @return array<mixed>|null
+	 */
+	public function getBody(): ?array
+	{
+		return $this->body;
+	}
+
+	/**
+	 * HTTP metoda požadavku — jedna cesta může obsluhovat čtení i zápis.
+	 */
+	public function getMethod(): string
+	{
+		return $this->method;
 	}
 
 	public function has(string $name): bool

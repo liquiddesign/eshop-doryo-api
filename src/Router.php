@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace DoryoApi;
 
+use DoryoApi\Endpoint\MethodAware;
 use DoryoApi\Http\ApiException;
 use Nette\Utils\Strings;
 
@@ -13,7 +14,10 @@ use Nette\Utils\Strings;
  */
 final class Router
 {
-	/** @var array<array{segments: array<string>, handler: callable}> */
+	/** Co smí endpoint, který o metodách nic neřekl. */
+	private const READ_ONLY = ['GET', 'HEAD'];
+
+	/** @var array<array{segments: array<string>, handler: callable, methods: array<string>}> */
 	private array $routes = [];
 
 	/**
@@ -22,17 +26,20 @@ final class Router
 	public function __construct(array $endpoints)
 	{
 		foreach ($endpoints as $endpoint) {
+			$methods = $endpoint instanceof MethodAware ? $endpoint->getMethods() : [];
+
 			foreach ($endpoint->getRoutes() as $pattern => $method) {
 				$this->routes[] = [
 					'segments' => \explode('/', Strings::trim($pattern, '/')),
 					'handler' => [$endpoint, $method],
+					'methods' => $methods[$pattern] ?? self::READ_ONLY,
 				];
 			}
 		}
 	}
 
 	/**
-	 * @return array{0: callable, 1: array<string, string>}
+	 * @return array{0: callable, 1: array<string, string>, 2: array<string>} obsluha, parametry cesty, povolené metody
 	 * @throws \DoryoApi\Http\ApiException
 	 */
 	public function match(string $path): array
@@ -43,7 +50,7 @@ final class Router
 			$params = self::matchSegments($route['segments'], $segments);
 
 			if ($params !== null) {
-				return [$route['handler'], $params];
+				return [$route['handler'], $params, $route['methods']];
 			}
 		}
 

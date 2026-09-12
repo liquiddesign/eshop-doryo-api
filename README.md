@@ -13,7 +13,8 @@ a `eshop_price.hidden`, které jsou až od eshopu 2.1; shop na 2.0 produkty měk
 neskrývá, takže tam ty podmínky nedávají smysl. Běží to i na StORM 1.1 — balík z něj používá
 jen API, které je v 1.1 i 2.0 shodné.
 
-**Jen ke čtení.** Žádný endpoint nemění data; jiná metoda než GET/HEAD vrací `405`.
+**Jen ke čtení.** Žádný endpoint balíku nemění data; jiná metoda než GET/HEAD vrací `405`.
+Zápis si může přidat projekt vlastním endpointem, viz [Vlastní endpointy z projektu](#vlastní-endpointy-z-projektu).
 
 ## Instalace
 
@@ -194,6 +195,75 @@ Reporty nad položkami (`top-products`, `replenishment`, `sales?groupBy=category
 jedním dotazem vedeným od objednávek (`STRAIGHT_JOIN`), ne přes seznam id nákupů v PHP — ten
 na čtyřiceti tisících objednávek za půl roku trval déle, než klient čekal. I tak platí: bez
 `from` a `to` se počítá celé výchozí okno; kdo se ptá na poslední týdny, má je zadat.
+
+## Vlastní endpointy z projektu
+
+Balík nese jen to, co má každý shop na `liquiddesign/eshop` stejné. Co je jen tenhle projekt
+(zápis do jeho administrace, jeho vlastní doména), si přidá projekt sám: služba implementující
+`DoryoApi\Endpoint\Endpoint` se zaregistruje v `endpoints:` a balík ji přidá do routeru
+i do `openapi.json`.
+
+```php
+final class AdminEndpoint implements
+    DoryoApi\Endpoint\Endpoint,
+    DoryoApi\Endpoint\MethodAware,
+    DoryoApi\OpenApi\SpecificationPart
+{
+    /** @return array<string, string> vzor cesty => jméno obsluhy */
+    public function getRoutes(): array
+    {
+        return ['v1/admin/pages' => 'pages', 'v1/admin/forms/{presenter}/{form}' => 'form'];
+    }
+
+    /** @return array<string, array<string>> bez téhle metody umí endpoint jen GET/HEAD */
+    public function getMethods(): array
+    {
+        return ['v1/admin/forms/{presenter}/{form}' => ['GET', 'POST']];
+    }
+
+    /** @param array<string, string> $params */
+    public function form(array $params, DoryoApi\Http\Query $query): DoryoApi\Http\Response
+    {
+        // $query->getMethod() rozliší čtení od zápisu, $query->getBody() je rozparsované JSON tělo
+        return new DoryoApi\Http\Response(['ok' => true]);
+    }
+
+    /** @return array<string, mixed> */
+    public function getOpenApiPaths(): array
+    {
+        return ['/v1/admin/pages' => ['get' => ['summary' => 'Mapa administrace', ...]]];
+    }
+
+    /** @return array<string, mixed> */
+    public function getOpenApiComponents(): array
+    {
+        return [];
+    }
+}
+```
+
+```neon
+services:
+    adminEndpoint: App\DoryoApi\AdminEndpoint
+
+doryoApi:
+    endpoints: [@adminEndpoint]
+```
+
+Pravidla:
+
+- **Výchozí stav je jen ke čtení.** Bez `MethodAware` vrátí cokoliv jiného než GET/HEAD 405.
+  Metody se hlásí per vzor cesty, takže jedna cesta může být jen ke čtení a druhá i k zápisu.
+- **Pořadí kontrol je token → routa → metoda.** Neznámá cesta je 404 i u POSTu, známá cesta
+  se špatnou metodou 405 se seznamem toho, co umí.
+- **Tělo** se u zápisových metod rozparsuje z JSONu (neplatný JSON = 400 `problem+json`) a předá
+  se v `Query::getBody()`. Signatura obsluh zůstává `method(array $params, Query $query): Response`.
+- **Popis do `openapi.json`** dodá endpoint přes `SpecificationPart`. Vestavěné cesty a schémata
+  mají přednost — projekt smí přidávat, ne přepisovat. Schémata těla piš **inline**: parser
+  v Doryo resolvuje `$ref` jen u parametrů, u schémat těla ne.
+- **Chyby** se vracejí přes `DoryoApi\Http\ApiException` (400, 401, 403, 404, 405, …), aby
+  odpověď byla `application/problem+json` jako ve zbytku API.
+- Log volání nese metodu a u zápisu jen velikost těla, nikdy jeho obsah.
 
 ## Testy
 

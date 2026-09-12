@@ -10,10 +10,16 @@ use DoryoApi\Config;
  * Popis API pro introspekci z Doryo. Je psaný ručně, ne generovaný z kódu — model si ho čte
  * jako dokumentaci, takže popisy jsou česky a mluví o tom, k čemu je který endpoint dobrý,
  * ne o tom, jak je udělaný.
+ *
+ * Endpointy shopu, které umí {@see SpecificationPart}, si svůj kus popisu dodají samy.
  */
 final class Specification
 {
-	public function __construct(private Config $config)
+	/**
+	 * @param array<\DoryoApi\Endpoint\Endpoint> $endpoints Endpointy shopu; ty z nich, které umí
+	 *     {@see SpecificationPart}, si svůj kus popisu dodají samy
+	 */
+	public function __construct(private Config $config, private array $endpoints = [])
 	{
 	}
 
@@ -22,26 +28,54 @@ final class Specification
 	 */
 	public function build(string $baseUrl): array
 	{
+		$extra = $this->extraParts();
+
 		return [
 			'openapi' => '3.0.3',
 			'info' => [
-				'title' => 'Čtecí API e-shopu ' . ($this->config->getShopName() ?? ''),
+				'title' => ($extra['paths'] ? 'API e-shopu ' : 'Čtecí API e-shopu ') . ($this->config->getShopName() ?? ''),
 				'version' => Config::version(),
-				'description' => 'Jen ke čtení. Objednávky, zákazníci, produkty, sklad a faktury e-shopu '
-					. 've stejném tvaru, v jakém je vydávají ERP konektory. Všechny seznamy jsou stránkované '
+				'description' => 'Objednávky, zákazníci, produkty, sklad a faktury e-shopu '
+					. 've stejném tvaru, v jakém je vydávají ERP konektory. Čtení je pod /v1, zápis (kde ho shop '
+					. 'zapnul) je označený metodou POST. Všechny seznamy jsou stránkované '
 					. 'kurzorem, částky jsou řetězce s měnou, časy jsou v ISO 8601.',
 			],
 			'servers' => [['url' => $baseUrl]],
 			'security' => [['bearerAuth' => []]],
-			'paths' => $this->paths(),
+			'paths' => $this->paths() + $extra['paths'],
 			'components' => [
 				'securitySchemes' => [
 					'bearerAuth' => ['type' => 'http', 'scheme' => 'bearer'],
 				],
-				'parameters' => $this->parameters(),
-				'schemas' => $this->schemas(),
-			],
+				'parameters' => $this->parameters() + ($extra['components']['parameters'] ?? []),
+				'schemas' => $this->schemas() + ($extra['components']['schemas'] ?? []),
+			] + $extra['components'],
 		];
+	}
+
+	/**
+	 * Popisy, které dodaly projektové endpointy. Vestavěné cesty mají přednost — endpoint
+	 * shopu smí přidávat, ne přepisovat to, na co Doryo spoléhá u všech shopů stejně.
+	 * @return array{paths: array<string, mixed>, components: array<string, mixed>}
+	 */
+	private function extraParts(): array
+	{
+		$paths = [];
+		$components = [];
+
+		foreach ($this->endpoints as $endpoint) {
+			if (!$endpoint instanceof SpecificationPart) {
+				continue;
+			}
+
+			$paths += $endpoint->getOpenApiPaths();
+
+			foreach ($endpoint->getOpenApiComponents() as $section => $values) {
+				$components[$section] = ($components[$section] ?? []) + (\is_array($values) ? $values : []);
+			}
+		}
+
+		return ['paths' => $paths, 'components' => $components];
 	}
 
 	/**
