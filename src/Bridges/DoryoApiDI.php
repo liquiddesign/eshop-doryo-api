@@ -73,6 +73,12 @@ final class DoryoApiDI extends CompilerExtension
 			'userfilesDir' => Expect::string()->nullable(),
 			'imageSizes' => Expect::listOf('string')->default(['origin', 'detail', 'thumb'])->mergeDefaults(false),
 			'logDir' => Expect::string()->nullable(),
+			// stropy a výchozí okno seznamů a reportů: shop se statisíci objednávek si okno zkrátí,
+			// ať report bez from/to nepočítá půl roku — model bez data dostane právě tohle
+			'defaultLimit' => Expect::int(200)->min(1),
+			'maxLimit' => Expect::int(1000)->min(1),
+			'defaultWindowMonths' => Expect::int(6)->min(1),
+			'maxWindowMonths' => Expect::int(24)->min(1),
 			// vlastní pole shopu: seznam služeb implementujících DoryoApi\Extension\DoryoApiExtension
 			'extensions' => Expect::listOf(Expect::anyOf(Expect::string(), Expect::type(Statement::class))),
 		]);
@@ -101,6 +107,10 @@ final class DoryoApiDI extends CompilerExtension
 				'customerPricesEnabled' => $config->customerPrices,
 				'userfilesDir' => $config->userfilesDir ?? $builder->parameters['wwwDir'] . '/userfiles',
 				'imageSizes' => $config->imageSizes,
+				'defaultLimit' => $config->defaultLimit,
+				'maxLimit' => $config->maxLimit,
+				'defaultWindowMonths' => $config->defaultWindowMonths,
+				'maxWindowMonths' => $config->maxWindowMonths,
 			]);
 
 		$builder->addDefinition($this->prefix('codebooks'))->setFactory(Codebooks::class);

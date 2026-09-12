@@ -187,8 +187,7 @@ final class Specification
 					. 'Zrušené objednávky se nepočítají. S minItems/maxItems se dá zúžit na objednávky dané '
 					. 'velikosti — třeba „po měsících, jen objednávky nad deset položek" jedním dotazem.',
 				[
-					$this->param('from', 'Začátek období (YYYY-MM-DD).'),
-					$this->param('to', 'Konec období (YYYY-MM-DD).'),
+					...$this->windowParams(),
 					$this->param('groupBy', 'Seskupení: month (výchozí), week, day, merchant, customer, category, producer.'),
 					$this->param('minItems', 'Jen objednávky s aspoň tolika položkami.', 'integer'),
 					$this->param('maxItems', 'Jen objednávky s nejvýš tolika položkami.', 'integer'),
@@ -256,7 +255,7 @@ final class Specification
 			'/v1/customers/{id}/products' => $this->operation(
 				'Co zákazník odebírá',
 				'Položky, které zákazník bral za období — množství, tržba, poslední nákup.',
-				[$this->pathParam('id', 'Id zákazníka.'), $this->param('from', 'Od (YYYY-MM-DD).'), $this->param('to', 'Do (YYYY-MM-DD).'), $this->ref('Limit')],
+				[$this->pathParam('id', 'Id zákazníka.'), ...$this->windowParams(), $this->ref('Limit')],
 				'CustomerProductList',
 			),
 			'/v1/products/{id}/visibility' => $this->operation(
@@ -285,8 +284,7 @@ final class Specification
 				'Obrat a počet objednávek za období proti srovnávacímu období. Bez `compareFrom`/`compareTo` '
 					. 'se srovnává se stejně dlouhým předchozím obdobím. Řazení `sort`: revenue, growth, drop.',
 				[
-					$this->param('from', 'Od (YYYY-MM-DD).'),
-					$this->param('to', 'Do (YYYY-MM-DD).'),
+					...$this->windowParams(),
 					$this->param('compareFrom', 'Začátek srovnávacího období.'),
 					$this->param('compareTo', 'Konec srovnávacího období.'),
 					$this->param('sort', 'revenue (výchozí), growth, drop.'),
@@ -320,8 +318,7 @@ final class Specification
 				'Prodejnost proti skladu: kolik se prodalo, kolik jde denně, co zbývá a na kolik dní to vystačí. '
 					. 'Bez `store` se sčítají i dodavatelské sklady — na „musíme objednat?" se ptej na vlastní sklad.',
 				[
-					$this->param('from', 'Od (YYYY-MM-DD).'),
-					$this->param('to', 'Do (YYYY-MM-DD).'),
+					...$this->windowParams(),
 					$this->param('store', 'Kód skladu (seznam dá /v1/meta/codebooks).'),
 					$this->param('maxCoverageDays', 'Vrátit jen položky s pokrytím do tolika dnů (výchozí 30).', 'integer'),
 					$this->ref('Limit'),
@@ -399,7 +396,7 @@ final class Specification
 			'/v1/reports/unlinked' => $this->operation(
 				'Doklady bez protějšku',
 				'Objednávky bez faktury, faktury bez objednávky a objednávky nezaexportované do ERP.',
-				[$this->param('from', 'Od (YYYY-MM-DD).'), $this->param('to', 'Do (YYYY-MM-DD).'), $this->ref('Limit')],
+				[...$this->windowParams(), $this->ref('Limit')],
 				'Unlinked',
 			),
 			'/v1/reports/abandoned-carts' => $this->operation(
@@ -408,8 +405,7 @@ final class Specification
 					. 'je to dotaz přes všechny položky košíků a trvá desítky sekund. Košíky zakládají i roboti, '
 					. 'takže value je horní odhad, ne ušlá tržba.',
 				[
-					$this->param('from', 'Od (YYYY-MM-DD).'),
-					$this->param('to', 'Do (YYYY-MM-DD).'),
+					...$this->windowParams(),
 					$this->param('withItems', 'true = dopočítat hodnotu a nejčastější položky (pomalé).', 'boolean'),
 					$this->ref('Limit'),
 				],
@@ -419,8 +415,7 @@ final class Specification
 				'Nejprodávanější produkty',
 				'Produkty seřazené podle tržby za období.',
 				[
-					$this->param('from', 'Začátek období (YYYY-MM-DD).'),
-					$this->param('to', 'Konec období (YYYY-MM-DD).'),
+					...$this->windowParams(),
 					$this->ref('Limit'),
 				],
 				'TopProductList',
@@ -466,6 +461,26 @@ final class Specification
 	/**
 	 * @return array<string, mixed>
 	 */
+	/**
+	 * Období reportu. Bez obou hranic se bere výchozí okno a to musí model vědět: na shopu se
+	 * statisíci objednávek je půlroční agregace to nejdražší, co může chtít, a bez nápovědy
+	 * ji chce jako první — a pak zkouší totéž znovu.
+	 * @return array<array<string, mixed>>
+	 */
+	private function windowParams(): array
+	{
+		$months = $this->config->getDefaultWindowMonths();
+
+		return [
+			$this->param('from', \sprintf(
+				'Začátek období (YYYY-MM-DD). Bez from a to se bere posledních %d měsíců — na velkém shopu je to '
+					. 'nejdražší dotaz, jaký jde položit; zadej období, na které se opravdu ptáš (týdny, ne půl roku).',
+				$months,
+			)),
+			$this->param('to', 'Konec období (YYYY-MM-DD).'),
+		];
+	}
+
 	private function param(string $name, string $description, string $type = 'string'): array
 	{
 		return [
@@ -654,9 +669,10 @@ final class Specification
 				'type' => 'object',
 				'nullable' => true,
 				'properties' => [
-					'available' => ['type' => 'integer'],
-					'reserved' => ['type' => 'integer'],
-					'onOrder' => ['type' => 'integer'],
+					'available' => ['type' => 'integer', 'nullable' => true, 'description' => 'null = shop zásobu tohoto produktu nevede (tracked: false); to není vyprodáno.'],
+					'reserved' => ['type' => 'integer', 'nullable' => true],
+					'onOrder' => ['type' => 'integer', 'nullable' => true],
+					'tracked' => ['type' => 'boolean'],
 				],
 			],
 			'Product' => [
@@ -803,10 +819,12 @@ final class Specification
 					'code' => ['type' => 'string', 'nullable' => true],
 					'name' => ['type' => 'string', 'nullable' => true],
 					'sold' => ['type' => 'integer'],
+					'revenue' => ['$ref' => '#/components/schemas/Money'],
 					'perDay' => ['type' => 'number'],
-					'available' => ['type' => 'integer'],
+					'available' => ['type' => 'integer', 'nullable' => true, 'description' => 'null = shop zásobu tohoto produktu nevede; to není vyprodáno.'],
+					'stockTracked' => ['type' => 'boolean'],
 					'coverageDays' => ['type' => 'integer', 'nullable' => true],
-					'suggestedOrder' => ['type' => 'integer'],
+					'suggestedOrder' => ['type' => 'integer', 'nullable' => true],
 				],
 			],
 			'CustomerProduct' => [
