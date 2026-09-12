@@ -10,6 +10,9 @@ use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
 use DoryoApi\OpenApi\Specification;
 use Nette\Http\IRequest;
+use Nette\Utils\Arrays;
+use Nette\Utils\Json;
+use Nette\Utils\JsonException;
 use Nette\Utils\Strings;
 
 /**
@@ -34,14 +37,11 @@ final class Api
 		$params = $request->getQuery();
 		$response = null;
 
+		$method = Strings::upper($request->getMethod());
+		$reads = $method === 'GET' || $method === 'HEAD';
+
 		try {
-			$method = $request->getMethod();
-
-			if ($method !== 'GET' && $method !== 'HEAD') {
-				throw ApiException::methodNotAllowed("Metoda $method není povolena, API je jen ke čtení.");
-			}
-
-			$response = $this->route($request, $path, \is_array($params) ? $params : []);
+			$response = $this->route($request, $path, \is_array($params) ? $params : [], $method);
 		} catch (ApiException $e) {
 			$response = Response::problem($e);
 		} catch (\Throwable $e) {
@@ -55,6 +55,10 @@ final class Api
 				$response?->getStatus() ?? 500,
 				$response?->getItemCount(),
 				(\microtime(true) - $started) * 1000,
+				$method,
+				// velikost v bajtech, ne ve znacích — jde o to, kolik toho přišlo po drátě
+				// phpcs:ignore Generic.PHP.ForbiddenFunctions.FoundWithAlternative
+				$reads ? null : \strlen($request->getRawBody() ?? ''),
 			);
 		}
 
@@ -64,7 +68,7 @@ final class Api
 	/**
 	 * @param array<string, mixed> $params
 	 */
-	private function route(IRequest $request, string $path, array $params): Response
+	private function route(IRequest $request, string $path, array $params, string $method): Response
 	{
 		// Health a rozcestník jdou schválně i bez tokenu — monitoring i člověk, který si
 		// adresu otevře v prohlížeči, mají dostat odpověď API. Bez autentizace ale neřeknou
@@ -86,20 +90,28 @@ final class Api
 		}
 
 		if ($path === 'openapi.json') {
+			self::assertMethod($method, ['GET', 'HEAD']);
+
 			return new Response($this->specification->build($this->baseUrl($request)));
 		}
 
 		if ($path === '') {
+			self::assertMethod($method, ['GET', 'HEAD']);
+
 			return $this->index($request);
 		}
 
-		[$handler, $routeParams] = $this->router->match($path);
+		// metoda se porovnává až s tím, co endpoint deklaruje — dřív by 405 přebilo i 404
+		// a projektový zápisový endpoint by se nikdy nedostal ke slovu
+		[$handler, $routeParams, $methods] = $this->router->match($path);
+		self::assertMethod($method, $methods);
 
 		if ($path === 'v1/meta/health' && !$authenticated) {
 			$routeParams['authenticated'] = '0';
 		}
 
-		$query = new Query($params, $this->config);
+		// tělo se čte až tady: nejdřív musí projít token, pak existovat cesta, která ho vůbec bere
+		$query = new Query($params, $this->config, self::parseBody($request, $method), $method);
 		$response = $handler($routeParams, $query);
 
 		$this->assertKnownParams($path, $query);
@@ -194,7 +206,7 @@ final class Api
 			'health' => "$baseUrl/v1/meta/health",
 			'capabilities' => "$baseUrl/v1/meta/capabilities",
 			'hint' => 'Endpointy jsou pod /v1 a chtějí hlavičku Authorization: Bearer <token>. '
-				. 'API je jen ke čtení, jiná metoda než GET vrací 405.',
+				. 'Čtecí část umí jen GET, jiná metoda vrací 405; co která cesta umí, je v /openapi.json.',
 		]);
 	}
 
@@ -203,5 +215,52 @@ final class Api
 		$url = $this->config->getShopUrl() ?? \rtrim($request->getUrl()->getBaseUrl(), '/');
 
 		return \rtrim($url, '/') . '/' . $this->config->getPrefix();
+	}
+
+	/**
+	 * Tělo požadavku. U čtecích metod se nečte vůbec, u zápisových musí být platný JSON objekt.
+	 * @return array<mixed>|null
+	 * @throws \DoryoApi\Http\ApiException
+	 */
+	private static function parseBody(IRequest $request, string $method): ?array
+	{
+		if ($method === 'GET' || $method === 'HEAD') {
+			return null;
+		}
+
+		$raw = $request->getRawBody();
+
+		if ($raw === null || Strings::trim($raw) === '') {
+			return [];
+		}
+
+		try {
+			$decoded = Json::decode($raw, Json::FORCE_ARRAY);
+		} catch (JsonException $e) {
+			throw ApiException::badRequest('Tělo požadavku není platný JSON: ' . $e->getMessage());
+		}
+
+		if (!\is_array($decoded)) {
+			throw ApiException::badRequest('Tělo požadavku musí být JSON objekt.');
+		}
+
+		return $decoded;
+	}
+
+	/**
+	 * @param array<string> $allowed
+	 * @throws \DoryoApi\Http\ApiException
+	 */
+	private static function assertMethod(string $method, array $allowed): void
+	{
+		if (Arrays::contains($allowed, $method)) {
+			return;
+		}
+
+		throw ApiException::methodNotAllowed(\sprintf(
+			'Metoda %s tady není povolena. Tahle cesta umí: %s.',
+			$method,
+			\implode(', ', $allowed),
+		));
 	}
 }

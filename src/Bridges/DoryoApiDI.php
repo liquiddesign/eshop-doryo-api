@@ -75,6 +75,10 @@ final class DoryoApiDI extends CompilerExtension
 			'logDir' => Expect::string()->nullable(),
 			// vlastní pole shopu: seznam služeb implementujících DoryoApi\Extension\DoryoApiExtension
 			'extensions' => Expect::listOf(Expect::anyOf(Expect::string(), Expect::type(Statement::class))),
+			// vlastní cesty shopu: seznam služeb implementujících DoryoApi\Endpoint\Endpoint.
+			// Přidávají se k vestavěným do routeru i do openapi.json — projekt tak umí vystavit
+			// i to, co je jen jeho (zápis do administrace, vlastní doména), bez zásahu do balíku.
+			'endpoints' => Expect::listOf(Expect::anyOf(Expect::string(), Expect::type(Statement::class))),
 		]);
 	}
 
@@ -105,7 +109,6 @@ final class DoryoApiDI extends CompilerExtension
 
 		$builder->addDefinition($this->prefix('codebooks'))->setFactory(Codebooks::class);
 		$builder->addDefinition($this->prefix('authenticator'))->setFactory(Authenticator::class);
-		$builder->addDefinition($this->prefix('specification'))->setFactory(Specification::class);
 		$builder->addDefinition($this->prefix('logger'))
 			->setFactory(Logger::class, [$config->logDir ?? $builder->parameters['appDir'] . '/../log']);
 
@@ -137,6 +140,11 @@ final class DoryoApiDI extends CompilerExtension
 			$endpoints[] = '@' . $this->prefix($name);
 		}
 
+		// projektové endpointy jdou za vestavěné: shop smí přidat cestu, ne přebít tu, na kterou
+		// Doryo spoléhá u všech shopů stejně
+		$endpoints = \array_merge($endpoints, $config->endpoints);
+
+		$builder->addDefinition($this->prefix('specification'))->setFactory(Specification::class, ['endpoints' => $endpoints]);
 		$builder->addDefinition($this->prefix('router'))->setFactory(Router::class, [$endpoints]);
 		$builder->addDefinition($this->prefix('api'))->setFactory(Api::class);
 		$builder->addDefinition($this->prefix('presenter'))->setFactory(ApiPresenter::class)->setAutowired(false);
