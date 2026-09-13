@@ -14,6 +14,7 @@ use DoryoApi\Support\Money;
 use DoryoApi\Support\OrderTotals;
 use Eshop\DB\Address;
 use Eshop\DB\Customer;
+use StORM\Collection;
 use StORM\DIConnection;
 
 /**
@@ -22,6 +23,9 @@ use StORM\DIConnection;
  */
 final class CustomersEndpoint extends BaseEndpoint
 {
+	/** Vazba zákazník–obchodník jako M:N. Shop ji může vést místo sloupce `eshop_customer.fk_merchant`. */
+	private const MERCHANT_NXN_TABLE = 'eshop_merchant_nxn_eshop_customer';
+
 	public function __construct(
 		DIConnection $connection,
 		Config $config,
@@ -66,7 +70,7 @@ final class CustomersEndpoint extends BaseEndpoint
 		}
 
 		if ($merchantId = $query->string('merchantId')) {
-			$collection->where('this.fk_merchant', $merchantId);
+			$this->whereMerchant($collection, $merchantId);
 		}
 
 		if ($since = $query->dateTime('since')) {
@@ -286,28 +290,70 @@ final class CustomersEndpoint extends BaseEndpoint
 	}
 
 	/**
+	 * Zákazníci jednoho obchodníka.
+	 *
+	 * Vazba je v eshopu dvojí: sloupec `eshop_customer.fk_merchant` a vazební tabulka. Shop může
+	 * používat jen jednu z nich — na Levioru je sloupec prázdný u všech osmnácti tisíc zákazníků
+	 * a vazba jde čistě přes M:N, takže filtr přes sloupec tam nevracel nic. Ptáme se proto na obojí.
+	 * @param \StORM\Collection<\Eshop\DB\Customer> $collection
+	 */
+	private function whereMerchant(Collection $collection, string $merchantId): void
+	{
+		if (!$this->codebooks->hasColumn(self::MERCHANT_NXN_TABLE, 'fk_merchant')) {
+			$collection->where('this.fk_merchant', $merchantId);
+
+			return;
+		}
+
+		$collection->where(
+			'this.fk_merchant = :apiMerchant OR this.uuid IN (SELECT nxn.fk_customer FROM ' . self::MERCHANT_NXN_TABLE . ' nxn WHERE nxn.fk_merchant = :apiMerchant)',
+			['apiMerchant' => $merchantId],
+		);
+	}
+
+	/**
 	 * Obchodník přiřazený zákazníkovi. Ve verzích eshopu, kde tahle vazba na entitě není,
-	 * se čte přímo sloupec — a když není ani ten, zůstane merchantId null.
+	 * se čte přímo sloupec, a komu ho shop neplní, tomu se dohledá z vazební tabulky —
+	 * jinak by `merchantId` zůstalo null i u zákazníka, který obchodníka má.
 	 * @param array<string> $ids
 	 * @return array<string, string>
 	 */
 	private function loadMerchantIds(array $ids): array
 	{
+		$map = [];
+
 		try {
 			$rows = $this->connection->rows(['c' => 'eshop_customer'], ['id' => 'c.uuid', 'merchant' => 'c.fk_merchant'])
 				->where('c.uuid', $ids)
 				->where('c.fk_merchant IS NOT NULL');
 
-			$map = [];
-
 			foreach ($rows as $row) {
 				$map[$row->id] = $row->merchant;
 			}
-
-			return $map;
 		} catch (\Throwable) {
 			return [];
 		}
+
+		$missing = \array_values(\array_diff($ids, \array_keys($map)));
+
+		if (!$missing || !$this->codebooks->hasColumn(self::MERCHANT_NXN_TABLE, 'fk_merchant')) {
+			return $map;
+		}
+
+		// zákazník může mít obchodníků víc (Levior vede dealera 1 a 2); do standardního pole jde ten
+		// první, na úplný seznam má shop rozšiřovací bod
+		$rows = $this->connection->rows(['nxn' => self::MERCHANT_NXN_TABLE], [
+			'id' => 'nxn.fk_customer',
+			'merchant' => 'MIN(nxn.fk_merchant)',
+		])
+			->where('nxn.fk_customer', $missing)
+			->setGroupBy(['nxn.fk_customer']);
+
+		foreach ($rows as $row) {
+			$map[$row->id] = $row->merchant;
+		}
+
+		return $map;
 	}
 
 	/**
