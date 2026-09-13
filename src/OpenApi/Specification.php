@@ -334,13 +334,21 @@ final class Specification
 			),
 			'/v1/reports/churn' => $this->operation(
 				'Kdo přestal odebírat',
-				'Zákazníci, kteří mívali objednávky, ale poslední mají starší než `inactiveDays`. '
-					. 'Vrací i kontakt (`email`, `phone`) a souhlas s newsletterem, takže se z odpovědi dá rovnou '
+				'Zákazníci, kteří od `from` mívali objednávky (aspoň `minOrders`), ale poslední mají starší než '
+					. '`inactiveDays`. Vrací i kontakt (`email`, `phone`) a souhlas s newsletterem, takže se z odpovědi dá rovnou '
 					. 'složit seznam příjemců, aniž by ses ptal na každého zákazníka zvlášť. '
-					. '`newsletter: null` znamená, že tenhle shop souhlas neeviduje — ne že souhlas není.',
+					. '`newsletter: null` znamená, že tenhle shop souhlas neeviduje — ne že souhlas není. '
+					. 'Odpověď vždy nese `window` (odkdy se počítalo a kde je hranice nečinnosti). Řadí se před oříznutím: '
+					. 'menší `limit` dotaz nezlevní, kratší okno (`from` blíž k dnešku) ano.',
 				[
-					$this->param('inactiveDays', 'Kolik dní bez objednávky (výchozí 90). Okno reportu se podle toho roztáhne.', 'integer'),
-					$this->param('minOrders', 'Minimální počet dřívějších objednávek (výchozí 3). Pro reaktivaci dej 1.', 'integer'),
+					$this->param('inactiveDays', 'Kolik dní bez objednávky znamená „přestal" (výchozí 90).', 'integer'),
+					$this->param('minOrders', 'Minimální počet objednávek od `from` (výchozí 3). Pro reaktivaci dej 1.', 'integer'),
+					$this->param('from', \sprintf(
+						'Odkdy se počítá „mívali objednávky" (YYYY-MM-DD). Bez něj %d měsíců před hranicí nečinnosti; nejvýš %d měsíců před ní.',
+						$this->config->getDefaultWindowMonths(),
+						$this->config->getMaxWindowMonths(),
+					)),
+					$this->param('merchantId', 'Jen zákazníci tohoto obchodníka (sloupec i vazební tabulka M:N).'),
 					$this->param('orderBy', 'Řazení: `revenue` (výchozí, největší obrat první) nebo `lastOrder` (naposledy objednal první).'),
 					$this->ref('Limit'),
 					$this->ref('Cursor'),
