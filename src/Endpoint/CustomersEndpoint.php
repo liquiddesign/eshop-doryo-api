@@ -10,6 +10,7 @@ use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
 use DoryoApi\Mapper\CustomerMapper;
 use DoryoApi\Support\Dates;
+use DoryoApi\Support\Merchants;
 use DoryoApi\Support\Money;
 use DoryoApi\Support\OrderTotals;
 use Eshop\DB\Address;
@@ -24,7 +25,7 @@ use StORM\DIConnection;
 final class CustomersEndpoint extends BaseEndpoint
 {
 	/** Vazba zákazník–obchodník jako M:N. Shop ji může vést místo sloupce `eshop_customer.fk_merchant`. */
-	private const MERCHANT_NXN_TABLE = 'eshop_merchant_nxn_eshop_customer';
+	private const MERCHANT_NXN_TABLE = Merchants::NXN_TABLE;
 
 	public function __construct(
 		DIConnection $connection,

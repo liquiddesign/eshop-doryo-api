@@ -418,6 +418,14 @@ echo "\nchurn — kontakt, stránkování a řazení\n";
 $churnUrl = "$baseUrl/v1/reports/churn?inactiveDays=365&minOrders=1";
 [$status, $churn] = request("$churnUrl&limit=2", $token);
 check('churn odpovídá', $status === 200 && \is_array($churn['items'] ?? null), "status $status");
+// Okno se vrací vždy — model má vědět, odkdy se „mívali objednávky" počítalo a kde je hranice.
+check('churn nese window s from a hranicí nečinnosti', \is_string($churn['window']['from'] ?? null) && \is_string($churn['window']['inactiveSince'] ?? null) && ($churn['window']['defaulted'] ?? null) === true);
+[$status, $churnOd] = request("$churnUrl&limit=2&from=" . \date('Y-m-d', \strtotime('-15 months')), $token);
+check('churn s from odpovídá a okno ho vrací', $status === 200 && ($churnOd['window']['defaulted'] ?? null) === false && ($churnOd['window']['from'] ?? null) === \date('Y-m-d', \strtotime('-15 months')), "status $status");
+[$status] = request("$churnUrl&from=" . \date('Y-m-d', \strtotime('-10 years')), $token);
+check('churn s from mimo strop okna je 400', $status === 400, "dostal jsem $status");
+[$status, $churnCizi] = request("$churnUrl&limit=2&merchantId=nesmysl-neexistuje", $token);
+check('churn s neznámým obchodníkem je prázdný seznam, ne pád', $status === 200 && ($churnCizi['items'] ?? null) === [], "status $status");
 
 $churnItem = $churn['items'][0] ?? null;
 

@@ -9,6 +9,7 @@ use DoryoApi\Http\Cursor;
 use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
 use DoryoApi\Support\Dates;
+use DoryoApi\Support\Merchants;
 use DoryoApi\Support\Money;
 use DoryoApi\Support\OrderTotals;
 use DoryoApi\Support\Sql;
@@ -234,8 +235,15 @@ final class ReportsEndpoint extends BaseEndpoint
 	}
 
 	/**
-	 * Kdo přestal odebírat: zákazníci, kteří mívali objednávky, ale poslední mají starší než
-	 * `inactiveDays`. Vrací i to, co u nich shop dřív utržil — ať je vidět, o co jde.
+	 * Kdo přestal odebírat: zákazníci, kteří od `from` mívali objednávky (aspoň `minOrders`), ale
+	 * poslední mají starší než `inactiveDays`. Vrací i to, co u nich shop utržil — ať je vidět, o co jde.
+	 *
+	 * Dvě fáze v jednom dotazu. Kandidáty (kdo objednával a od hranice mlčí) najde poddotaz jen nad
+	 * objednávkami a nákupy, bez peněz; obrat se pak sčítá jen jim. Do 1.7.0 se `OrderTotals`
+	 * (čtyři korelované poddotazy na objednávku) počítal všem zákazníkům za 24 měsíců a pak se
+	 * řadilo — na Levioru to nedoběhlo do 20 s ani s `limit=10`, protože řazení jde před oříznutím.
+	 * Okno „mívali objednávky" je proto taky kratší: výchozí okno reportů před hranicí nečinnosti,
+	 * a `from` ho posune, kam klient chce.
 	 * @param array<string, string> $params
 	 */
 	public function churn(array $params, Query $query): Response
@@ -245,49 +253,86 @@ final class ReportsEndpoint extends BaseEndpoint
 		$inactiveDays = $query->int('inactiveDays', 90) ?? 90;
 		$minOrders = $query->int('minOrders', 3) ?? 3;
 		$currency = $this->config->getCurrency();
-		// Okno musí sahat aspoň tak daleko, kam se ptá `inactiveDays`, jinak report tiše vynechá
-		// právě ty nejdéle mlčící: s výchozími 24 měsíci by se na `inactiveDays=800` nenašel nikdo,
-		// kdo neobjednal dva roky. Měsíc navíc je rezerva na nestejně dlouhé měsíce.
-		$maxMonths = \max($this->config->getMaxWindowMonths(), (int) \ceil($inactiveDays / 30) + 1);
 		$order = $query->string('orderBy', 'revenue');
+		$merchantId = $query->string('merchantId');
 
 		if (!Arrays::contains(self::CHURN_ORDER, $order)) {
 			throw ApiException::badRequest('Parametr orderBy musí být jeden z: ' . \implode(', ', self::CHURN_ORDER) . '.');
 		}
 
+		if ($inactiveDays < 1) {
+			throw ApiException::badRequest('Parametr inactiveDays musí být aspoň 1.');
+		}
+
+		if ($minOrders < 1) {
+			throw ApiException::badRequest('Parametr minOrders musí být aspoň 1.');
+		}
+
+		// Data jdou do poddotazu jako literály z DateTimeImmutable (vždy Y-m-d), čísla jako int —
+		// poddotaz v FROM parametry nenaváže. Hodnota od klienta (merchantId) se váže ve vnějším dotazu.
+		$today = new \DateTimeImmutable('today', new \DateTimeZone($this->config->getTimezone()));
+		$cutoff = $today->modify('-' . $inactiveDays . ' days');
+		$givenFrom = $query->date('from');
+		$from = $givenFrom !== null
+			? new \DateTimeImmutable($givenFrom)
+			: $cutoff->modify('-' . $this->config->getDefaultWindowMonths() . ' months');
+		$maxFrom = $cutoff->modify('-' . $this->config->getMaxWindowMonths() . ' months');
+
+		if ($from < $maxFrom) {
+			throw ApiException::badRequest(\sprintf(
+				'Parametr from smí být nejvýš %d měsíců před hranicí nečinnosti (%s), tedy od %s.',
+				$this->config->getMaxWindowMonths(),
+				$cutoff->format('Y-m-d'),
+				$maxFrom->format('Y-m-d'),
+			));
+		}
+
+		if ($from >= $cutoff) {
+			throw ApiException::badRequest(\sprintf('Parametr from musí být dřív než hranice nečinnosti (dnes minus inactiveDays = %s).', $cutoff->format('Y-m-d')));
+		}
+
+		// Jen datum, bez času: MySQL ho s createdTs srovná jako půlnoc a v literálu nezůstane dvojtečka,
+		// kterou by parser pojmenovaných parametrů mohl vzít za placeholder.
+		$fromDay = $from->format('Y-m-d');
+		$cutoffDay = $cutoff->format('Y-m-d');
 		// `newsletter` má jen novější eshop; kde sloupec není, vrací se null místo pádu dotazu.
 		$newsletter = $this->codebooks->hasColumn('eshop_customer', 'newsletter');
 
+		$candidates = 'SELECT p.fk_customer AS customer, COUNT(o.uuid) AS orders, MAX(o.createdTs) AS lastOrderOn, MIN(o.createdTs) AS firstOrderOn'
+			. ' FROM eshop_order o INNER JOIN eshop_purchase p ON p.uuid = o.fk_purchase'
+			. " WHERE o.canceledTs IS NULL AND p.fk_customer IS NOT NULL AND o.createdTs >= '$fromDay'"
+			. ' GROUP BY p.fk_customer'
+			. ' HAVING COUNT(o.uuid) >= ' . (int) $minOrders . " AND MAX(o.createdTs) < '$cutoffDay'";
+
 		$select = [
-			'customerId' => 'p.fk_customer',
-			'name' => 'IFNULL(IFNULL(c.company, c.fullname), p.fullname)',
+			'customerId' => 'st.customer',
+			'name' => 'IFNULL(IFNULL(MAX(c.company), MAX(c.fullname)), MAX(p.fullname))',
 			// Kontakt: pravda je účet zákazníka, adresa z jeho objednávek je záloha pro účty
 			// bez e-mailu (MAX() = kterákoli z nich, ne nutně nejnovější — na rozesílku to stačí).
 			// Bez tohohle sloupce se ze segmentu nedá složit seznam příjemců jinak než dotazem
 			// na každého zákazníka zvlášť.
-			'email' => 'IFNULL(c.email, MAX(p.email))',
-			'phone' => 'IFNULL(c.phone, MAX(p.phone))',
-			'orders' => 'COUNT(o.uuid)',
-			'lastOrderOn' => 'MAX(o.createdTs)',
-			'firstOrderOn' => 'MIN(o.createdTs)',
+			'email' => 'IFNULL(MAX(c.email), MAX(p.email))',
+			'phone' => 'IFNULL(MAX(c.phone), MAX(p.phone))',
+			'orders' => 'MAX(st.orders)',
+			'lastOrderOn' => 'MAX(st.lastOrderOn)',
+			'firstOrderOn' => 'MAX(st.firstOrderOn)',
 			'revenue' => 'SUM(' . OrderTotals::withVat('o', 'p') . ')',
 		];
 
 		if ($newsletter) {
-			$select['newsletter'] = 'c.newsletter';
+			$select['newsletter'] = 'MAX(c.newsletter)';
 		}
 
-		$rows = $this->connection->rows(['o' => 'eshop_order'], $select)
-			->join(['p' => 'eshop_purchase'], 'p.uuid = o.fk_purchase', [], 'INNER')
-			->join(['c' => 'eshop_customer'], 'c.uuid = p.fk_customer')
-			->where('o.canceledTs IS NULL')
-			->where('p.fk_customer IS NOT NULL')
-			->where('o.createdTs >= DATE_SUB(NOW(), INTERVAL :apiMonths MONTH)', ['apiMonths' => $maxMonths])
-			->setGroupBy(['p.fk_customer'], 'COUNT(o.uuid) >= :apiMin AND MAX(o.createdTs) < DATE_SUB(NOW(), INTERVAL :apiDays DAY)', [
-				'apiMin' => $minOrders,
-				'apiDays' => $inactiveDays,
-			])
+		$rows = $this->connection->rows(['st' => "($candidates)"], $select)
+			->join(['c' => 'eshop_customer'], 'c.uuid = st.customer')
+			->join(['p' => 'eshop_purchase'], 'p.fk_customer = st.customer', [], 'INNER')
+			->join(['o' => 'eshop_order'], "o.fk_purchase = p.uuid AND o.canceledTs IS NULL AND o.createdTs >= '$fromDay'", [], 'INNER')
+			->setGroupBy(['st.customer'])
 			->orderBy($order === 'lastOrder' ? ['lastOrderOn' => 'DESC'] : ['revenue' => 'DESC']);
+
+		if ($merchantId !== null) {
+			$rows->where(Merchants::customerCondition($this->codebooks, 'st.customer'), ['apiMerchant' => $merchantId]);
+		}
 
 		// Stránkuje se jako seznamy: o řádek víc, než klient chtěl, a z toho kurzor. Bez toho
 		// vrátil report tisícovku nejbohatších a `hasMore: false` — tedy tvrdil, že to jsou
@@ -325,7 +370,17 @@ final class ReportsEndpoint extends BaseEndpoint
 			];
 		}
 
-		return Response::list($items, $hasMore ? Cursor::encode($offset + $limit) : null);
+		// Okno se vrací vždy: model má vědět, odkdy se „mívali objednávky" počítalo a kde je hranice.
+		return Response::list($items, $hasMore ? Cursor::encode($offset + $limit) : null)->withExtra([
+			'window' => [
+				'from' => $from->format('Y-m-d'),
+				'inactiveSince' => $cutoff->format('Y-m-d'),
+				'inactiveDays' => $inactiveDays,
+				'minOrders' => $minOrders,
+				'params' => ['from', 'inactiveDays'],
+				'defaulted' => $givenFrom === null,
+			],
+		]);
 	}
 
 	/**

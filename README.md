@@ -196,6 +196,13 @@ jedním dotazem vedeným od objednávek (`STRAIGHT_JOIN`), ne přes seznam id n�
 na čtyřiceti tisících objednávek za půl roku trval déle, než klient čekal. I tak platí: bez
 `from` a `to` se počítá celé výchozí okno; kdo se ptá na poslední týdny, má je zadat.
 
+`reports/churn` hledá kandidáty (kdo objednával a od hranice nečinnosti mlčí) poddotazem jen
+nad objednávkami a nákupy a obrat sčítá až jim — do 1.7.0 se cena každé objednávky (čtyři
+korelované poddotazy) počítala všem zákazníkům za 24 měsíců a teprve pak se řadilo, takže
+menší `limit` nepomohl. Okno „mívali objednávky" je výchozí okno reportů před hranicí
+nečinnosti a `from` ho posouvá; `merchantId` zúží report na zákazníky jednoho obchodníka
+(sloupec i vazební tabulka M:N).
+
 ## Vlastní endpointy z projektu
 
 Balík nese jen to, co má každý shop na `liquiddesign/eshop` stejné. Co je jen tenhle projekt
