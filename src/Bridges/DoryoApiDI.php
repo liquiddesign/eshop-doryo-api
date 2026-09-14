@@ -72,6 +72,10 @@ final class DoryoApiDI extends CompilerExtension
 			'customerPrices' => Expect::bool(false),
 			'userfilesDir' => Expect::string()->nullable(),
 			'imageSizes' => Expect::listOf('string')->default(['origin', 'detail', 'thumb'])->mergeDefaults(false),
+			// veřejná adresa userfiles, když neleží pod adresou shopu; null = shopUrl + /userfiles
+			'userfilesUrl' => Expect::string()->nullable(),
+			// odkaz na produkt, když ho shop nemá ve stránkách (web_page): 'produkt/{id}', {id} a {code}
+			'productUrlMask' => Expect::string()->nullable(),
 			'logDir' => Expect::string()->nullable(),
 			// stropy a výchozí okno seznamů a reportů: shop se statisíci objednávek si okno zkrátí,
 			// ať report bez from/to nepočítá půl roku — model bez data dostane právě tohle
@@ -111,6 +115,8 @@ final class DoryoApiDI extends CompilerExtension
 				'customerPricesEnabled' => $config->customerPrices,
 				'userfilesDir' => $config->userfilesDir ?? $builder->parameters['wwwDir'] . '/userfiles',
 				'imageSizes' => $config->imageSizes,
+				'userfilesUrl' => $config->userfilesUrl,
+				'productUrlMask' => $config->productUrlMask,
 				'defaultLimit' => $config->defaultLimit,
 				'maxLimit' => $config->maxLimit,
 				'defaultWindowMonths' => $config->defaultWindowMonths,

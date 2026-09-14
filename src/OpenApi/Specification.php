@@ -318,7 +318,7 @@ final class Specification
 			),
 			'/v1/products/{id}/media' => $this->operation(
 				'Proč u produktu není obrázek',
-				'Diagnostika obrázků: nastavený soubor, existence jednotlivých velikostí, galerie, '
+				'Diagnostika obrázků: nastavený soubor, existence jednotlivých velikostí a jejich veřejné adresy (checks.urls), galerie, '
 					. 'obrázky od dodavatele a jestli je jejich import povolený.',
 				[$this->pathParam('id', 'Id produktu.')],
 				'Diagnostics',
@@ -762,7 +762,13 @@ final class Specification
 					'price' => ['$ref' => '#/components/schemas/Money'],
 					'priceWithVat' => ['$ref' => '#/components/schemas/Money'],
 					'stock' => ['$ref' => '#/components/schemas/Stock'],
-					'eshop' => ['type' => 'object'],
+					'images' => [
+						'type' => 'object',
+						'nullable' => true,
+						'description' => 'Veřejné adresy obrázku po velikostech (thumb, detail, origin); null, když produkt obrázek nemá. Existenci souborů ověří /v1/products/{id}/media.',
+						'additionalProperties' => ['type' => 'string'],
+					],
+					'eshop' => ['type' => 'object', 'description' => 'eshop.url = veřejný odkaz na produkt (ze stránek shopu, jinak podle productUrlMask).'],
 				],
 			],
 			'Report' => [

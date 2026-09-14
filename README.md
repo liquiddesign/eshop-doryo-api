@@ -72,6 +72,8 @@ Dvě věci, na které se naráží na klasickém serveru:
 | `maxLimit` | `1000` | strop parametru `limit` |
 | `defaultWindowMonths` | `6` | výchozí okno seznamů a reportů bez data; shop se statisíci objednávek si ho zkrátí |
 | `maxWindowMonths` | `24` | nejdelší okno, které API přijme |
+| `userfilesUrl` | `null` | veřejná adresa složky s obrázky; `null` = adresa shopu + `/userfiles` |
+| `productUrlMask` | `null` | odkaz na produkt, když ho shop nemá ve stránkách: `produkt/{id}` (`{id}`, `{code}`) |
 | `extensions` | `[]` | služby implementující `DoryoApi\Extension\DoryoApiExtension` |
 
 Výchozí mapa stavů je `new: [open]`, `processing: [received]`, `delivered: [finished]`,

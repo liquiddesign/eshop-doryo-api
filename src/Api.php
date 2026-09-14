@@ -70,6 +70,8 @@ final class Api
 	 */
 	private function route(IRequest $request, string $path, array $params, string $method): Response
 	{
+		$this->config->useRequestBaseUrl($request->getUrl()->getBaseUrl());
+
 		// Health a rozcestník jdou schválně i bez tokenu — monitoring i člověk, který si
 		// adresu otevře v prohlížeči, mají dostat odpověď API. Bez autentizace ale neřeknou
 		// nic o shopu, jen že služba běží.
