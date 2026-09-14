@@ -203,6 +203,11 @@ menší `limit` nepomohl. Okno „mívali objednávky" je výchozí okno report�
 nečinnosti a `from` ho posouvá; `merchantId` zúží report na zákazníky jednoho obchodníka
 (sloupec i vazební tabulka M:N).
 
+Cesty zákazníka podle id (`/v1/customers/{id}`, `/orders`, `/invoices`, `/summary`, `/products`,
+`/prices`) berou `merchantId` jako **ověření vlastnictví**: zákazník, který obchodníkovi nepatří,
+je 404, jako by neexistoval. Odpovědi těch cest vlastníka nenesou, takže Kolego jinak „obchodník
+vidí jen své zákazníky" u cest podle id neuhlídá — broker mu `merchantId` dosadí sám (od 1.8.1).
+
 ## Vlastní endpointy z projektu
 
 Balík nese jen to, co má každý shop na `liquiddesign/eshop` stejné. Co je jen tenhle projekt

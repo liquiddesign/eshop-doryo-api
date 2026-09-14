@@ -107,25 +107,25 @@ final class Specification
 			'/v1/customers/{id}' => $this->operation(
 				'Detail zákazníka',
 				'Jeden zákazník podle id.',
-				[$this->pathParam('id', 'Id zákazníka.')],
+				[$this->pathParam('id', 'Id zákazníka.'), $this->ownerParam()],
 				'Customer',
 			),
 			'/v1/customers/{id}/orders' => $this->operation(
 				'Objednávky zákazníka',
 				'Objednávky jednoho zákazníka; parametry jsou stejné jako u /v1/orders.',
-				[$this->pathParam('id', 'Id zákazníka.'), $this->ref('Limit'), $this->ref('Cursor')],
+				[$this->pathParam('id', 'Id zákazníka.'), $this->ownerParam(), $this->ref('Limit'), $this->ref('Cursor')],
 				'OrderList',
 			),
 			'/v1/customers/{id}/invoices' => $this->operation(
 				'Faktury zákazníka',
 				'Faktury jednoho zákazníka; parametry jsou stejné jako u /v1/invoices.',
-				[$this->pathParam('id', 'Id zákazníka.'), $this->ref('Limit'), $this->ref('Cursor')],
+				[$this->pathParam('id', 'Id zákazníka.'), $this->ownerParam(), $this->ref('Limit'), $this->ref('Cursor')],
 				'InvoiceList',
 			),
 			'/v1/customers/{id}/summary' => $this->operation(
 				'Souhrn za zákazníka',
 				'Počet objednávek, obrat, datum poslední objednávky, počet neuhrazených faktur a dlužná částka.',
-				[$this->pathParam('id', 'Id zákazníka.')],
+				[$this->pathParam('id', 'Id zákazníka.'), $this->ownerParam()],
 				'CustomerSummary',
 			),
 			'/v1/orders' => $this->operation(
@@ -279,6 +279,7 @@ final class Specification
 					. 'Tohle je podklad pro cenovou nabídku. Shop to může mít vypnuté (pak 403).',
 				[
 					$this->pathParam('id', 'Id zákazníka.'),
+					$this->ownerParam(),
 					$this->param('codes', 'Kódy produktů oddělené čárkou.'),
 					$this->ref('Q'),
 					$this->ref('Limit'),
@@ -289,7 +290,7 @@ final class Specification
 			'/v1/customers/{id}/products' => $this->operation(
 				'Co zákazník odebírá',
 				'Položky, které zákazník bral za období — množství, tržba, poslední nákup.',
-				[$this->pathParam('id', 'Id zákazníka.'), ...$this->windowParams(), $this->ref('Limit')],
+				[$this->pathParam('id', 'Id zákazníka.'), $this->ownerParam(), ...$this->windowParams(), $this->ref('Limit')],
 				'CustomerProductList',
 			),
 			'/v1/products/{id}/visibility' => $this->operation(
@@ -521,6 +522,15 @@ final class Specification
 			)),
 			$this->param('to', 'Konec období (YYYY-MM-DD).'),
 		];
+	}
+
+	/**
+	 * `merchantId` u cest zákazníka podle id: ověření vlastnictví, ne filtr.
+	 * @return array<string, mixed>
+	 */
+	private function ownerParam(): array
+	{
+		return $this->param('merchantId', 'Ověření vlastnictví: zákazník, který tomuhle obchodníkovi nepatří (sloupec ani vazební tabulka), je 404.');
 	}
 
 	private function param(string $name, string $description, string $type = 'string'): array

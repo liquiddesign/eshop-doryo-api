@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace DoryoApi\Support;
 
 use DoryoApi\Codebooks;
+use StORM\DIConnection;
 
 /**
  * Vazba zákazník–obchodník je v eshopu dvojí: sloupec `eshop_customer.fk_merchant` a vazební
@@ -29,5 +30,18 @@ final class Merchants
 		}
 
 		return "($column OR $customerExpr IN (SELECT mnxn.fk_customer FROM " . self::NXN_TABLE . " mnxn WHERE mnxn.fk_merchant = :$param))";
+	}
+
+	/**
+	 * Patří zákazník obchodníkovi? Jeden dotaz nad eshop_customer; obchodník i zákazník jsou navázané parametry.
+	 */
+	public static function ownsCustomer(DIConnection $connection, Codebooks $codebooks, string $customerId, string $merchantId): bool
+	{
+		$row = $connection->rows(['oc' => 'eshop_customer'], ['id' => 'oc.uuid'])
+			->where('oc.uuid = :apiOwnedCustomer', ['apiOwnedCustomer' => $customerId])
+			->where(self::customerCondition($codebooks, 'oc.uuid'), ['apiMerchant' => $merchantId])
+			->first();
+
+		return $row !== null;
 	}
 }

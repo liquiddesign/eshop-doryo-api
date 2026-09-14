@@ -258,6 +258,13 @@ if ($customerId === null) {
 	check('detail zákazníka', $status === 200 && ($customer['id'] ?? null) === $customerId);
 	check('zákazník má blok eshop', isset($customer['eshop']['group']) || \array_key_exists('group', $customer['eshop'] ?? []));
 
+	// merchantId u cest podle id je ověření vlastnictví: cizí (neexistující) obchodník = 404, ne 400 ani data
+	[$status] = request("$baseUrl/v1/customers/" . \rawurlencode($customerId) . '?merchantId=nesmysl-neexistuje', $token);
+	check('detail zákazníka s cizím merchantId je 404', $status === 404, "dostal jsem $status");
+	[$status] = request("$baseUrl/v1/customers/" . \rawurlencode($customerId) . '/summary?merchantId=nesmysl-neexistuje', $token);
+	check('souhrn zákazníka s cizím merchantId je 404', $status === 404, "dostal jsem $status");
+	[$status] = request("$baseUrl/v1/customers/" . \rawurlencode($customerId) . '/orders?merchantId=nesmysl-neexistuje&limit=1', $token);
+	check('objednávky zákazníka s cizím merchantId jsou 404', $status === 404, "dostal jsem $status");
 	[$status, $summary] = request("$baseUrl/v1/customers/" . \rawurlencode($customerId) . '/summary', $token);
 	check('souhrn zákazníka', $status === 200 && \is_int($summary['orders'] ?? null) && isMoney($summary['revenue'] ?? null) && isMoney($summary['outstanding'] ?? null));
 

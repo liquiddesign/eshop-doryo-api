@@ -10,8 +10,10 @@ use DoryoApi\Http\ApiException;
 use DoryoApi\Http\Cursor;
 use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
+use DoryoApi\Support\Merchants;
 use DoryoApi\Support\ProductCode;
 use DoryoApi\Support\Sql;
+use Eshop\DB\Customer;
 use StORM\Collection;
 use StORM\DIConnection;
 use StORM\Entity;
@@ -282,6 +284,29 @@ abstract class BaseEndpoint implements Endpoint
 		}
 
 		return $entity;
+	}
+
+	/**
+	 * Zákazník pro pod-cesty `/v1/customers/{id}/…`, s ověřením vlastnictví.
+	 *
+	 * S `merchantId` v query se zákazník vydá, jen když obchodníkovi patří (sloupec i vazební
+	 * tabulka M:N), jinak 404 — stejně jako by neexistoval. Tudy Kolego drží „obchodník vidí jen
+	 * své zákazníky" i u cest podle id: broker obchodníkovi merchantId dosadí sám a odpovědi
+	 * těchhle cest (objednávky, souhrn, položky, ceny) vlastníka nenesou, takže je jinak nezkontroluje.
+	 * Bez `merchantId` se chová jako `one()`.
+	 */
+	protected function ownedCustomer(string $id, Query $query): Customer
+	{
+		$merchantId = $query->string('merchantId');
+
+		/** @var \Eshop\DB\Customer $customer */
+		$customer = $this->one(Customer::class, $id, 'Zákazník');
+
+		if ($merchantId !== null && !Merchants::ownsCustomer($this->connection, $this->codebooks, $customer->getPK(), $merchantId)) {
+			throw ApiException::notFound("Zákazník $id neexistuje nebo nepatří obchodníkovi $merchantId.");
+		}
+
+		return $customer;
 	}
 
 	/**
