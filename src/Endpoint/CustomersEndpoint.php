@@ -97,10 +97,7 @@ final class CustomersEndpoint extends BaseEndpoint
 	 */
 	public function detail(array $params, Query $query): Response
 	{
-		unset($query);
-
-		/** @var \Eshop\DB\Customer $customer */
-		$customer = $this->one(Customer::class, $params['id'], 'Zákazník');
+		$customer = $this->ownedCustomer($params['id'], $query);
 		$extras = $this->loadExtras([$customer->getPK() => $customer]);
 
 		return new Response($this->mapper->map($customer, $extras[$customer->getPK()]));
@@ -111,7 +108,7 @@ final class CustomersEndpoint extends BaseEndpoint
 	 */
 	public function orders(array $params, Query $query): Response
 	{
-		$this->one(Customer::class, $params['id'], 'Zákazník');
+		$this->ownedCustomer($params['id'], $query);
 
 		return $this->orders->listFiltered($query, $params['id']);
 	}
@@ -121,7 +118,7 @@ final class CustomersEndpoint extends BaseEndpoint
 	 */
 	public function invoices(array $params, Query $query): Response
 	{
-		$this->one(Customer::class, $params['id'], 'Zákazník');
+		$this->ownedCustomer($params['id'], $query);
 
 		return $this->invoices->listFiltered($query, $params['id']);
 	}
@@ -131,9 +128,7 @@ final class CustomersEndpoint extends BaseEndpoint
 	 */
 	public function summary(array $params, Query $query): Response
 	{
-		unset($query);
-
-		$this->one(Customer::class, $params['id'], 'Zákazník');
+		$this->ownedCustomer($params['id'], $query);
 
 		$rollup = $this->loadRollup([$params['id']])[$params['id']] ?? null;
 		$unpaid = $this->loadUnpaid([$params['id']])[$params['id']] ?? null;
@@ -156,7 +151,7 @@ final class CustomersEndpoint extends BaseEndpoint
 	 */
 	public function products(array $params, Query $query): Response
 	{
-		$this->one(Customer::class, $params['id'], 'Zákazník');
+		$this->ownedCustomer($params['id'], $query);
 
 		[$from, $to] = $query->window('from', 'to');
 		$suffix = $this->connection->getMutationSuffix();

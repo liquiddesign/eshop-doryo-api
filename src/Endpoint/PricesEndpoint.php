@@ -105,8 +105,7 @@ final class PricesEndpoint extends BaseEndpoint
 			throw ApiException::forbidden('Ceny konkrétních zákazníků API nevydává (vypnuto konfigurací).');
 		}
 
-		/** @var \Eshop\DB\Customer $customer */
-		$customer = $this->one(Customer::class, $params['id'], 'Zákazník');
+		$customer = $this->ownedCustomer($params['id'], $query);
 
 		$pricelists = $this->resolveCustomerPricelists($customer);
 
