@@ -227,7 +227,9 @@ final class Specification
 					. 'merchantId zúží na zákazníky obchodníka, customerId na jednoho zákazníka, product na jeden produkt. '
 					. 'compare=lastYear|previous přidá ke každému řádku totéž za srovnávací období (compare, change, '
 					. 'changePercent) — „tržby po měsících proti loňsku" je jedno volání. groupBy=newVsReturning rozdělí '
-					. 'tržbu na nové zákazníky (první objednávka v období) a stálé, s počtem zákazníků.',
+					. 'tržbu na nové zákazníky (první objednávka v období) a stálé, s počtem zákazníků. '
+					. 'Seskupení merchant, customer, category a producer jsou seřazená podle tržby (nejvíc nahoře), vrací '
+					. 'nejvýš limit řádků a total říká, kolik jich bylo celkem; časové řady a newVsReturning jdou celé.',
 				[
 					...$this->windowParams(),
 					$this->param('groupBy', 'Seskupení: month (výchozí), week, day, merchant, customer, category, producer, newVsReturning (noví vs. stálí zákazníci, s customers).'),
@@ -241,6 +243,7 @@ final class Specification
 					$this->param('compareTo', 'Vlastní srovnávací období — konec (YYYY-MM-DD).'),
 					$this->param('minItems', 'Jen objednávky s aspoň tolika položkami.', 'integer'),
 					$this->param('maxItems', 'Jen objednávky s nejvýš tolika položkami.', 'integer'),
+					$this->param('limit', \sprintf('U merchant, customer, category a producer: kolik řádků s nejvyšší tržbou (výchozí %d, maximum %d).', $this->config->getDefaultLimit(), $this->config->getMaxLimit()), 'integer'),
 				],
 				'ReportList',
 			),

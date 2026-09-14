@@ -106,9 +106,35 @@ final class ReportsEndpoint extends BaseEndpoint
 				. 'nevracejí. change a changePercent jsou z revenue.';
 		}
 
+		// Zákazníci, obchodníci, kategorie a výrobci po tržbě (nejvíc nahoře) a s limitem. Dřív šli
+		// zákazníci abecedně a všichni: Nože po zákaznících za čtvrtletí = 878 řádků, klient je ořízl
+		// na první třetinu abecedy a z top 10 odběratelů zbyl jeden (Levior, 14. 9. 2026).
+		// Časové řady a noví vs. stálí zůstávají v přirozeném pořadí a celé.
+		// limit se čte vždy — u časové řady by jinak skončil jako „neznámý parametr" 400
+		$limit = $query->limit();
+
+		if (!Arrays::contains(self::PERIOD_GROUPS, $groupBy) && $groupBy !== 'newVsReturning') {
+			$items = self::byRevenue($items);
+			$extra['total'] = \count($items);
+			$items = \array_slice($items, 0, $limit);
+		}
+
 		$response = Response::list($items, null);
 
 		return $extra ? $response->withExtra($extra) : $response;
+	}
+
+	/**
+	 * Řádky reportu seřazené podle tržby sestupně; při shodě podle klíče, ať je pořadí stabilní.
+	 * @param array<array<string, mixed>> $items
+	 * @return array<array<string, mixed>>
+	 */
+	public static function byRevenue(array $items): array
+	{
+		\usort($items, static fn (array $a, array $b): int => [(float) ($b['revenue']['amount'] ?? 0), (string) $a['key']]
+			<=> [(float) ($a['revenue']['amount'] ?? 0), (string) $b['key']]);
+
+		return $items;
 	}
 
 	/**
