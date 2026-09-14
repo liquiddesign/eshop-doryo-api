@@ -452,7 +452,7 @@ final class ProductsEndpoint extends BaseEndpoint
 				->where('p.type', 'product_detail')
 				->where('p.params', $params);
 
-			$base = $this->config->getShopUrl();
+			$base = $this->config->getPublicUrl();
 			$map = [];
 
 			foreach ($rows as $row) {

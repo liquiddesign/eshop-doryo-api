@@ -196,6 +196,8 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 			'findings' => $findings,
 			'checks' => [
 				'imageFileName' => $product->imageFileName ?: null,
+				// jen velikosti, které na disku jsou — hotová adresa, žádné skládání složky
+				'urls' => \array_intersect_key($this->config->imageUrls(Product::GALLERY_DIR, $product->imageFileName ?: null) ?? [], \array_filter($files)),
 				'imageNeedFix' => (bool) $this->entityValue($product, 'imageNeedFix'),
 				'files' => $files,
 				'galleryPhotos' => $gallery,

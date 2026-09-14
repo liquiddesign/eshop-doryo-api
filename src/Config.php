@@ -18,10 +18,12 @@ final class Config
 	 * Verze balíku, když se nedá zjistit z Composeru (balík nasazený mimo composer install).
 	 * Skutečná verze se bere z tagu přes {@see version()}, aby s vydáním nedriftovala.
 	 */
-	public const VERSION = '1.9.1';
+	public const VERSION = '1.10.0';
 
 	/** Normalizované stavy objednávek, které API vrací v poli `status`. */
 	public const ORDER_STATUSES = ['new', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
+
+	private ?string $requestBaseUrl = null;
 
 	/**
 	 * @param string $prefix Prefix cesty API; musí odpovídat routě v NEONu
@@ -35,6 +37,9 @@ final class Config
 	 * @param bool $customerPricesEnabled Smí API vydat ceny konkrétního zákazníka (viz spec §11)
 	 * @param string|null $userfilesDir Adresář s obrázky produktů — kvůli diagnostice médií
 	 * @param array<string> $imageSizes Velikosti, ve kterých se obrázky generují
+	 * @param string|null $userfilesUrl Veřejná adresa složky userfiles; null = adresa shopu + /userfiles
+	 * @param string|null $productUrlMask Odkaz na produkt, když ho shop nemá ve stránkách: `produkt/{id}`
+	 *     ({id} a {code}); null = bez náhradního odkazu
 	 * @param int $defaultLimit Kolik záznamů vrátí seznam nebo report bez `limit`
 	 * @param int $maxLimit Strop parametru `limit`
 	 * @param int $defaultWindowMonths Výchozí okno seznamů a reportů bez data; velký shop si ho zkrátí
@@ -61,6 +66,8 @@ final class Config
 		private bool $customerPricesEnabled = false,
 		private ?string $userfilesDir = null,
 		private array $imageSizes = ['origin', 'detail', 'thumb'],
+		private ?string $userfilesUrl = null,
+		private ?string $productUrlMask = null,
 		private int $defaultLimit = 200,
 		private int $maxLimit = 1000,
 		private int $defaultWindowMonths = 6,
@@ -116,6 +123,62 @@ final class Config
 		}
 
 		return $this->shopUrl;
+	}
+
+	/**
+	 * Adresa požadavku — náhrada za shopUrl, když ho stroj nemá nastavený. Bez ní by odkazy
+	 * v odpovědích (obrázek, produkt) byly relativní a model by je neměl čím otevřít.
+	 */
+	public function useRequestBaseUrl(string $url): void
+	{
+		$this->requestBaseUrl = \rtrim($url, '/');
+	}
+
+	/**
+	 * Veřejná adresa shopu pro absolutní odkazy: shopUrl (i z env), jinak adresa požadavku.
+	 */
+	public function getPublicUrl(): ?string
+	{
+		return $this->getShopUrl() ?? $this->requestBaseUrl;
+	}
+
+	/**
+	 * Veřejné adresy obrázku produktu po velikostech; null bez souboru nebo bez známé adresy.
+	 * Existence souborů se tu neověřuje (seznam produktů by sahal na disk tisíckrát) — to dělá
+	 * /v1/products/{id}/media.
+	 * @return array<string, string>|null
+	 */
+	public function imageUrls(string $dir, ?string $fileName): ?array
+	{
+		$base = $this->userfilesUrl ?? ($this->getPublicUrl() !== null ? $this->getPublicUrl() . '/userfiles' : null);
+
+		if (!$fileName || $base === null) {
+			return null;
+		}
+
+		$urls = [];
+
+		foreach ($this->imageSizes as $size) {
+			$urls[$size] = \rtrim($base, '/') . "/$dir/$size/" . \rawurlencode($fileName);
+		}
+
+		return $urls;
+	}
+
+	/**
+	 * Náhradní odkaz na produkt podle masky; null bez masky nebo bez adresy shopu.
+	 */
+	public function productUrl(string $id, ?string $code): ?string
+	{
+		$base = $this->getPublicUrl();
+
+		if ($this->productUrlMask === null || $base === null) {
+			return null;
+		}
+
+		$path = \strtr($this->productUrlMask, ['{id}' => \rawurlencode($id), '{code}' => \rawurlencode((string) $code)]);
+
+		return $base . '/' . \ltrim($path, '/');
 	}
 
 	public function getCurrency(): string

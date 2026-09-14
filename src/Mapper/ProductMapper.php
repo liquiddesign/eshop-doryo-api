@@ -53,8 +53,10 @@ final class ProductMapper extends Mapper
 			'priceWithVat' => Money::format($priceVat, $currency),
 			'stock' => $extras['stock'] ?? null,
 			'attributes' => \array_values($extras['attributes'] ?? []),
+			// adresy velikostí obrázku (thumb, detail, origin) — do e-mailu nebo náhledu bez hádání složky
+			'images' => $this->config->imageUrls(Product::GALLERY_DIR, $product->imageFileName ?: null),
 			'eshop' => [
-				'url' => $extras['url'] ?? null,
+				'url' => $extras['url'] ?? $this->config->productUrl($product->getPK(), $product->getFullCode()),
 				'supplierCodes' => \array_values($extras['supplierCodes'] ?? []),
 				'hidden' => $extras['hidden'] ?? null,
 				'mpn' => $product->mpn ?: null,
