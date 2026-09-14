@@ -15,7 +15,9 @@ use StORM\DIConnection;
 final class ProductFilter
 {
 	/**
-	 * @return array{sql: string, values: array<string, string>, nazev: string}|null null = taková kategorie není
+	 * `sql` je podmínka nad zadaným výrazem, `sablona` totéž s `{P}` místo výrazu (report si dosadí, co
+	 * potřebuje), `pocet` = kolik produktů množina má.
+	 * @return array{sql: string, sablona: string, values: array<string, string>, nazev: string, pocet: int}|null null = taková kategorie není
 	 */
 	public static function category(DIConnection $connection, string $category, string $suffix, string $productExpr): ?array
 	{
@@ -38,18 +40,27 @@ final class ProductFilter
 			return null;
 		}
 
+		$set = 'SELECT fnxn.fk_product FROM eshop_product_nxn_eshop_category fnxn'
+			. ' JOIN eshop_category fcat ON fcat.uuid = fnxn.fk_category WHERE ' . \implode(' OR ', $conditions);
+		// kolik produktů to je — podle toho si report vybere pořadí spojení (viz ReportsEndpoint::applyItemFilter)
+		$count = $connection->rows(['fnxn' => 'eshop_product_nxn_eshop_category'], ['n' => 'COUNT(DISTINCT fnxn.fk_product)'])
+			->join(['fcat' => 'eshop_category'], 'fcat.uuid = fnxn.fk_category', [], 'INNER')
+			->where(\implode(' OR ', $conditions), $values)
+			->first();
+
 		return [
-			'sql' => "$productExpr IN (SELECT fnxn.fk_product FROM eshop_product_nxn_eshop_category fnxn"
-				. ' JOIN eshop_category fcat ON fcat.uuid = fnxn.fk_category WHERE ' . \implode(' OR ', $conditions) . ')',
+			'sql' => "$productExpr IN ($set)",
+			'sablona' => "{P} IN ($set)",
 			'values' => $values,
 			'nazev' => \implode(', ', \array_unique($names)),
+			'pocet' => (int) ($count->n ?? 0),
 		];
 	}
 
 	/**
 	 * Jeden produkt podle id nebo kódu (i s podkódem, s vodicí nulou i bez — {@see ProductCode}).
 	 * Holý kód bez podkódu zahrne všechny jeho podkódy, to je u „vývoj prodeje produktu" žádoucí.
-	 * @return array{sql: string, values: array<string, string>, nazev: string}|null null = takový produkt není
+	 * @return array{sql: string, sablona: string, values: array<string, string>, nazev: string, pocet: int}|null null = takový produkt není
 	 */
 	public static function product(DIConnection $connection, ?Codebooks $codebooks, string $product, string $suffix, string $productExpr): ?array
 	{
@@ -72,13 +83,15 @@ final class ProductFilter
 
 		return [
 			'sql' => "$productExpr IN (SELECT fpp.uuid FROM eshop_product fpp WHERE $condition)",
+			'sablona' => "{P} IN (SELECT fpp.uuid FROM eshop_product fpp WHERE $condition)",
 			'values' => ['apiProduct' => $product],
 			'nazev' => \implode('; ', $found),
+			'pocet' => \count($found),
 		];
 	}
 
 	/**
-	 * @return array{sql: string, values: array<string, string>, nazev: string}|null null = takový výrobce není
+	 * @return array{sql: string, sablona: string, values: array<string, string>, nazev: string, pocet: int}|null null = takový výrobce není
 	 */
 	public static function producer(DIConnection $connection, string $producer, string $suffix, string $productExpr): ?array
 	{
@@ -90,10 +103,16 @@ final class ProductFilter
 			return null;
 		}
 
+		$count = $connection->rows(['fpp' => 'eshop_product'], ['n' => 'COUNT(*)'])
+			->where('fpp.fk_producer = :apiProducer', ['apiProducer' => (string) $row->id])
+			->first();
+
 		return [
 			'sql' => "$productExpr IN (SELECT fpp.uuid FROM eshop_product fpp WHERE fpp.fk_producer = :apiProducer)",
+			'sablona' => '{P} IN (SELECT fpp.uuid FROM eshop_product fpp WHERE fpp.fk_producer = :apiProducer)',
 			'values' => ['apiProducer' => (string) $row->id],
 			'nazev' => (string) $row->name,
+			'pocet' => (int) ($count->n ?? 0),
 		];
 	}
 }

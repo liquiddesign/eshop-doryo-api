@@ -207,10 +207,12 @@ Reporty `sales` a `top-products` berou `category` a `producer` (id, kód nebo n�
 i s podkategoriemi): tržba se pak počítá z položek objednávek, ne z ceny objednávky, a odpověď
 nese `filter` s tím, co se našlo. „Kteří zákazníci berou nože" je jedno volání
 (`groupBy=customer&category=Nože`), stejně jako vývoj po měsících; do 1.8.1 to z API poskládat nešlo.
-S filtrem se dotaz nevede od objednávek (`STRAIGHT_JOIN`), ale nechá se optimalizátoru: u malé
-kategorie začne od jejích položek přes index `eshop_cartitem(fk_product)` a je rychlý i za celý
-rok; u kořenové kategorie přes velké okno zůstává drahý — zadej období. Že index chybí, hlásí
-`/v1/meta/health`.
+S filtrem rozhoduje velikost množiny produktů: do pěti produktů (typicky `product`) jde dotaz
+od položek přes index `eshop_cartitem(fk_product)` a je rychlý i za celý rok; větší množina
+(kategorie, výrobce) jde od objednávek okna se spojením na materializovanou množinu produktů —
+na kopii Levioru 5 s za 3 měsíce, kdežto od položek 50–68 s (Nože: 162 produktů, ale 279 tisíc
+řádků položek za všechny roky). Cena roste s oknem, ne s velikostí kategorie — zadej období.
+Že index chybí, hlásí `/v1/meta/health`.
 
 Dál (1.9.0) `sales` a `top-products` berou `merchantId` (nákupy zákazníků obchodníka — sloupec
 i vazební tabulka, ne kdo objednávku zadal) a `customerId`; `sales` navíc `product` (id nebo kód,
