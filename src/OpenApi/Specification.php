@@ -223,12 +223,22 @@ final class Specification
 					. 'velikosti — třeba „po měsících, jen objednávky nad deset položek" jedním dotazem. S category nebo '
 					. 'producer se report zúží na položky té kategorie (i podkategorií) nebo toho výrobce — třeba „kteří '
 					. 'zákazníci berou nože" = groupBy=customer&category=Nože, nebo vývoj po měsících groupBy=month; '
-					. 'tržba je pak z položek (bez dopravy a platby) a odpověď nese filter s tím, co se našlo.',
+					. 'tržba je pak z položek (bez dopravy a platby) a odpověď nese filter s tím, co se našlo. '
+					. 'merchantId zúží na zákazníky obchodníka, customerId na jednoho zákazníka, product na jeden produkt. '
+					. 'compare=lastYear|previous přidá ke každému řádku totéž za srovnávací období (compare, change, '
+					. 'changePercent) — „tržby po měsících proti loňsku" je jedno volání. groupBy=newVsReturning rozdělí '
+					. 'tržbu na nové zákazníky (první objednávka v období) a stálé, s počtem zákazníků.',
 				[
 					...$this->windowParams(),
-					$this->param('groupBy', 'Seskupení: month (výchozí), week, day, merchant, customer, category, producer.'),
+					$this->param('groupBy', 'Seskupení: month (výchozí), week, day, merchant, customer, category, producer, newVsReturning (noví vs. stálí zákazníci, s customers).'),
 					$this->param('category', 'Jen položky z kategorie — id, kód nebo název; zahrne i podkategorie. Neznámá je 400.'),
 					$this->param('producer', 'Jen položky od výrobce — id nebo název. Neznámý je 400.'),
+					$this->param('product', 'Jen jeden produkt — id nebo kód (i s podkódem; holý kód zahrne jeho podkódy). Neznámý je 400.'),
+					$this->param('merchantId', 'Jen nákupy zákazníků tohoto obchodníka (sloupec i vazební tabulka M:N) — ne kdo objednávku zadal.'),
+					$this->param('customerId', 'Jen nákupy jednoho zákazníka; neznámý je 404.'),
+					$this->param('compare', 'Srovnávací období: lastYear (totéž okno o rok dřív) nebo previous (stejně dlouhé bezprostředně předchozí). Řádky dostanou compare, change a changePercent.'),
+					$this->param('compareFrom', 'Vlastní srovnávací období — začátek (YYYY-MM-DD), jen spolu s compareTo a bez compare.'),
+					$this->param('compareTo', 'Vlastní srovnávací období — konec (YYYY-MM-DD).'),
 					$this->param('minItems', 'Jen objednávky s aspoň tolika položkami.', 'integer'),
 					$this->param('maxItems', 'Jen objednávky s nejvýš tolika položkami.', 'integer'),
 				],
@@ -463,11 +473,13 @@ final class Specification
 			'/v1/reports/top-products' => $this->operation(
 				'Nejprodávanější produkty',
 				'Produkty seřazené podle tržby za období. S category nebo producer jen z té kategorie (i podkategorií) '
-					. 'nebo od toho výrobce.',
+					. 'nebo od toho výrobce; s merchantId jen z nákupů zákazníků obchodníka, s customerId jen jednoho zákazníka.',
 				[
 					...$this->windowParams(),
 					$this->param('category', 'Jen produkty z kategorie — id, kód nebo název; zahrne i podkategorie. Neznámá je 400.'),
 					$this->param('producer', 'Jen produkty od výrobce — id nebo název. Neznámý je 400.'),
+					$this->param('merchantId', 'Jen nákupy zákazníků tohoto obchodníka (sloupec i vazební tabulka M:N).'),
+					$this->param('customerId', 'Jen nákupy jednoho zákazníka; neznámý je 404.'),
 					$this->ref('Limit'),
 				],
 				'TopProductList',
@@ -760,6 +772,14 @@ final class Specification
 					'orders' => ['type' => 'integer'],
 					'revenue' => ['$ref' => '#/components/schemas/Money'],
 					'revenueWithoutVat' => ['$ref' => '#/components/schemas/Money'],
+					'customers' => ['type' => 'integer', 'description' => 'Jen u groupBy=newVsReturning: počet různých zákazníků.'],
+					'compare' => [
+						'type' => 'object',
+						'nullable' => true,
+						'description' => 'Jen s compare/compareFrom: týž řádek za srovnávací období (key, orders, revenue, revenueWithoutVat); null, když tam nebyl.',
+					],
+					'change' => ['$ref' => '#/components/schemas/Money', 'description' => 'Jen se srovnáním: revenue minus revenue srovnávacího období.'],
+					'changePercent' => ['type' => 'number', 'nullable' => true, 'description' => 'Jen se srovnáním: změna revenue v procentech; null bez základu.'],
 				],
 			],
 			'TopProduct' => [

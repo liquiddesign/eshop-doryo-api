@@ -212,6 +212,14 @@ kategorie začne od jejích položek přes index `eshop_cartitem(fk_product)` a 
 rok; u kořenové kategorie přes velké okno zůstává drahý — zadej období. Že index chybí, hlásí
 `/v1/meta/health`.
 
+Dál (1.9.0) `sales` a `top-products` berou `merchantId` (nákupy zákazníků obchodníka — sloupec
+i vazební tabulka, ne kdo objednávku zadal) a `customerId`; `sales` navíc `product` (id nebo kód,
+holý kód zahrne podkódy), srovnání `compare=lastYear|previous` nebo `compareFrom`+`compareTo`
+(každý řádek dostane `compare`, `change`, `changePercent`; měsíce, týdny a dny se u `lastYear`
+párují o rok posunutým klíčem, u `previous` podle pořadí) a `groupBy=newVsReturning` (nový =
+první objednávka zákazníka padá do období; řádky nesou `customers`). Srovnání je druhý stejný
+dotaz, „noví vs. stálí" jeden průchod objednávkami navíc — na velkém shopu zadej období.
+
 Cesty zákazníka podle id (`/v1/customers/{id}`, `/orders`, `/invoices`, `/summary`, `/products`,
 `/prices`) berou `merchantId` jako **ověření vlastnictví**: zákazník, který obchodníkovi nepatří,
 je 404, jako by neexistoval. Odpovědi těch cest vlastníka nenesou, takže Kolego jinak „obchodník
