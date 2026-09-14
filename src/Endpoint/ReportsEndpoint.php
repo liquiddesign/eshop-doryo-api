@@ -29,6 +29,12 @@ final class ReportsEndpoint extends BaseEndpoint
 	private const GROUP_BY = ['month', 'week', 'day', 'merchant', 'customer', 'category', 'producer', 'newVsReturning'];
 	private const PERIOD_GROUPS = ['month', 'week', 'day'];
 	private const COMPARE_MODES = ['lastYear', 'previous'];
+	/**
+	 * Do kolika produktů se filtr položek vyplatí vést od položek (index fk_product). Nože na Levioru
+	 * mají 162 produktů, ale 279 tisíc řádků položek za všechny roky — od položek 50–68 s, od objednávek
+	 * s oknem 5 s; jeden produkt naopak 1 s od položek proti 5 s od objednávek (dev kopie, 14. 9. 2026).
+	 */
+	private const SMALL_PRODUCT_SET = 5;
 	/** První objednávka každého zákazníka — pro „nový vs. stálý": nový je ten, jehož první objednávka padá do okna. */
 	private const FIRST_ORDERS = '(SELECT p2.fk_customer AS customer, MIN(o2.createdTs) AS firstOn FROM eshop_order o2'
 		. ' INNER JOIN eshop_purchase p2 ON p2.uuid = o2.fk_purchase WHERE o2.canceledTs IS NULL AND p2.fk_customer IS NOT NULL GROUP BY p2.fk_customer)';
@@ -288,13 +294,13 @@ final class ReportsEndpoint extends BaseEndpoint
 			'name' => "MAX(ci.productName$suffix)",
 			'quantity' => 'SUM(ci.amount)',
 			'revenue' => 'SUM(ci.priceVat * ci.amount)',
-		], null, $filter === null)
+		], null, $filter === null || !$filter['small'])
 			->setGroupBy(['ci.fk_product'])
 			->orderBy(['revenue' => 'DESC'])
 			->setTake($query->limit());
 
 		if ($filter !== null) {
-			$rows->where($filter['sql'], $filter['values']);
+			self::applyItemFilter($rows, $filter);
 		}
 
 		if ($purchaseFilter !== null) {
@@ -1234,10 +1240,10 @@ final class ReportsEndpoint extends BaseEndpoint
 			'orders' => 'COUNT(DISTINCT o.fk_purchase)',
 			'revenue' => 'SUM(ci.priceVat * ci.amount)',
 			'revenueWithoutVat' => 'SUM(ci.price * ci.amount)',
-		], $purchases, $filter === null);
+		], $purchases, $filter === null || !$filter['small']);
 
 		if ($filter !== null) {
-			$rows->where($filter['sql'], $filter['values']);
+			self::applyItemFilter($rows, $filter);
 		}
 
 		if ($purchaseFilter !== null) {
@@ -1298,9 +1304,10 @@ final class ReportsEndpoint extends BaseEndpoint
 			return null;
 		}
 
-		$sql = [];
+		$sablony = [];
 		$values = [];
 		$popis = [];
+		$pocet = \PHP_INT_MAX;
 
 		if ($category !== null) {
 			$f = ProductFilter::category($this->connection, $category, $suffix, 'ci.fk_product');
@@ -1309,9 +1316,10 @@ final class ReportsEndpoint extends BaseEndpoint
 				throw ApiException::badRequest("Kategorie $category neexistuje — hledá se podle id, kódu nebo názvu; seznam dá /v1/categories.");
 			}
 
-			$sql[] = $f['sql'];
+			$sablony[] = $f['sablona'];
 			$values += $f['values'];
 			$popis['category'] = $f['nazev'];
+			$pocet = \min($pocet, $f['pocet']);
 		}
 
 		if ($producer !== null) {
@@ -1321,9 +1329,10 @@ final class ReportsEndpoint extends BaseEndpoint
 				throw ApiException::badRequest("Výrobce $producer neexistuje — hledá se podle id nebo názvu.");
 			}
 
-			$sql[] = $f['sql'];
+			$sablony[] = $f['sablona'];
 			$values += $f['values'];
 			$popis['producer'] = $f['nazev'];
+			$pocet = \min($pocet, $f['pocet']);
 		}
 
 		if ($product !== null) {
@@ -1333,12 +1342,39 @@ final class ReportsEndpoint extends BaseEndpoint
 				throw ApiException::badRequest("Produkt $product neexistuje — hledá se podle id nebo kódu (i s podkódem).");
 			}
 
-			$sql[] = $f['sql'];
+			$sablony[] = $f['sablona'];
 			$values += $f['values'];
 			$popis['product'] = $f['nazev'];
+			$pocet = \min($pocet, $f['pocet']);
 		}
 
-		return ['sql' => '(' . \implode(' AND ', $sql) . ')', 'values' => $values, 'popis' => $popis];
+		$podminka = fn (string $expr): string => '(' . \str_replace('{P}', $expr, \implode(' AND ', $sablony)) . ')';
+
+		return [
+			'sql' => $podminka('ci.fk_product'),
+			// množina produktů jako tabulka — u velké množiny se na ni objednávky okna jen napojí
+			'derived' => '(SELECT fpp0.uuid AS fk_product FROM eshop_product fpp0 WHERE ' . $podminka('fpp0.uuid') . ')',
+			'values' => $values,
+			'popis' => $popis,
+			'small' => $pocet <= self::SMALL_PRODUCT_SET,
+		];
+	}
+
+	/**
+	 * Zúžení reportu nad položkami podle velikosti množiny produktů: malá množina jde od položek
+	 * (index fk_product, dotaz bez STRAIGHT_JOIN — {@see itemSales()} dostane `straight = false`),
+	 * velká od objednávek okna se spojením na materializovanou množinu produktů.
+	 * @param array{sql: string, derived: string, values: array<string, string>, small: bool} $filter
+	 */
+	private static function applyItemFilter(GenericCollection $rows, array $filter): void
+	{
+		if ($filter['small']) {
+			$rows->where($filter['sql'], $filter['values']);
+
+			return;
+		}
+
+		$rows->join(['fp' => $filter['derived']], 'fp.fk_product = ci.fk_product', $filter['values'], 'INNER');
 	}
 
 	/**
@@ -1379,10 +1415,10 @@ final class ReportsEndpoint extends BaseEndpoint
 			$select['customers'] = 'COUNT(DISTINCT pu.fk_customer)';
 		}
 
-		$rows = $this->itemSales($from, $to, $select, $purchases, false)
-			->where($filter['sql'], $filter['values'])
+		$rows = $this->itemSales($from, $to, $select, $purchases, !$filter['small'])
 			->setGroupBy(['reportKey'])
 			->orderBy(['reportKey' => 'ASC']);
+		self::applyItemFilter($rows, $filter);
 
 		if ($purchaseFilter !== null || Arrays::contains(['merchant', 'customer', 'newVsReturning'], $groupBy)) {
 			$rows->join(['pu' => 'eshop_purchase'], 'pu.uuid = o.fk_purchase', [], 'INNER');
@@ -1408,9 +1444,9 @@ final class ReportsEndpoint extends BaseEndpoint
 	private function itemSales(string $from, string $to, array $select, ?array $purchases = null, bool $straight = true): GenericCollection
 	{
 		// Bez filtru vede dotaz od objednávek (index createdTs) — optimalizátor by jinak sáhl na celou
-		// tabulku položek. S filtrem kategorie/výrobce se pořadí nechává na něm: může začít od položek
-		// té kategorie přes index eshop_cartitem(fk_product), což je u malé kategorie o řád levnější
-		// než projít všechny položky okna (Levior: report po kategoriích za 3 měsíce = 10 s).
+		// tabulku položek. S filtrem záleží na velikosti množiny produktů (SMALL_PRODUCT_SET): malá jde
+		// od položek přes index fk_product (bez STRAIGHT_JOIN), velká zase od objednávek okna — jinak
+		// optimalizátor projde všechny položky kategorie za všechny roky (Levior: 50–68 s místo 5 s).
 		if ($straight) {
 			$first = (string) \array_key_first($select);
 			$select[$first] = 'STRAIGHT_JOIN ' . $select[$first];
