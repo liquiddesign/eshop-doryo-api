@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace DoryoApi\Support;
 
+use DoryoApi\Codebooks;
 use StORM\DIConnection;
 
 /**
@@ -42,6 +43,37 @@ final class ProductFilter
 				. ' JOIN eshop_category fcat ON fcat.uuid = fnxn.fk_category WHERE ' . \implode(' OR ', $conditions) . ')',
 			'values' => $values,
 			'nazev' => \implode(', ', \array_unique($names)),
+		];
+	}
+
+	/**
+	 * Jeden produkt podle id nebo kódu (i s podkódem, s vodicí nulou i bez — {@see ProductCode}).
+	 * Holý kód bez podkódu zahrne všechny jeho podkódy, to je u „vývoj prodeje produktu" žádoucí.
+	 * @return array{sql: string, values: array<string, string>, nazev: string}|null null = takový produkt není
+	 */
+	public static function product(DIConnection $connection, ?Codebooks $codebooks, string $product, string $suffix, string $productExpr): ?array
+	{
+		$in = Sql::inList($connection, ProductCode::variants([$product]));
+		$byCode = \implode(' OR ', \array_map(static fn (string $e): string => "$e IN ($in)", ProductCode::codeExpressions($codebooks, 'fpp')));
+		$condition = "(fpp.uuid = :apiProduct OR $byCode)";
+
+		$rows = $connection->rows(['fpp' => 'eshop_product'], ['id' => 'fpp.uuid', 'code' => 'fpp.code', 'name' => "fpp.name$suffix"])
+			->where($condition, ['apiProduct' => $product])
+			->setTake(3);
+		$found = [];
+
+		foreach ($rows as $row) {
+			$found[] = (string) $row->code . ' ' . (string) $row->name;
+		}
+
+		if (!$found) {
+			return null;
+		}
+
+		return [
+			'sql' => "$productExpr IN (SELECT fpp.uuid FROM eshop_product fpp WHERE $condition)",
+			'values' => ['apiProduct' => $product],
+			'nazev' => \implode('; ', $found),
 		];
 	}
 

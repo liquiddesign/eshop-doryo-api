@@ -262,6 +262,32 @@ if ($categoryName !== null) {
 [$status] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow&category=nesmysl-neexistuje", $token);
 check('neznámá kategorie v reportu tržeb je 400', $status === 400, "dostal jsem $status");
 
+// Srovnání s loňskem: každý řádek nese compare/change/changePercent (i null), odpověď compareWindow
+[$status, $salesCmp] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow&compare=lastYear", $token);
+check('report tržeb se srovnáním odpovídá', $status === 200 && ($salesCmp['compareWindow']['mode'] ?? null) === 'lastYear', "status $status");
+$cmpRow = $salesCmp['items'][0] ?? null;
+check('řádek se srovnáním má compare, change a changePercent', $cmpRow === null || (\array_key_exists('compare', $cmpRow) && \array_key_exists('change', $cmpRow) && \array_key_exists('changePercent', $cmpRow)));
+[$status] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow&compare=nesmysl", $token);
+check('neznámý compare je 400', $status === 400, "dostal jsem $status");
+
+// Noví vs. stálí zákazníci: klíče jen new/returning/bez zákazníka, s počtem zákazníků
+[$status, $nvr] = request("$baseUrl/v1/reports/sales?groupBy=newVsReturning$reportWindow", $token);
+$nvrKeys = \array_column($nvr['items'] ?? [], 'key');
+check('noví vs. stálí odpovídá', $status === 200 && \is_array($nvr['items'] ?? null), "status $status");
+check('noví vs. stálí má jen známé klíče a počet zákazníků', \array_diff($nvrKeys, ['new', 'returning', 'bez zákazníka']) === [] && ($nvr['items'] === [] || \is_int($nvr['items'][0]['customers'] ?? null)), 'klíče ' . \implode(',', $nvrKeys));
+
+// Filtr obchodníka a produktu: neznámý obchodník je prázdno, produkt podle kódu vrací filter.product
+[$status, $salesMer] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow&merchantId=nesmysl-neexistuje", $token);
+check('report tržeb s neznámým obchodníkem je prázdný seznam', $status === 200 && ($salesMer['items'] ?? null) === [], "status $status");
+
+if (!empty($product['code'])) {
+	[$status, $salesProd] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow&product=" . \rawurlencode((string) $product['code']), $token);
+	check('report tržeb jednoho produktu', $status === 200 && ($salesProd['filter']['product'] ?? null) !== null, "status $status");
+}
+
+[$status] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow&product=nesmysl-neexistuje", $token);
+check('neznámý produkt v reportu tržeb je 400', $status === 400, "dostal jsem $status");
+
 echo "\nzákazník a jeho doklady\n";
 $customerId = null;
 
@@ -287,6 +313,10 @@ if ($customerId === null) {
 	check('souhrn zákazníka s cizím merchantId je 404', $status === 404, "dostal jsem $status");
 	[$status] = request("$baseUrl/v1/customers/" . \rawurlencode($customerId) . '/orders?merchantId=nesmysl-neexistuje&limit=1', $token);
 	check('objednávky zákazníka s cizím merchantId jsou 404', $status === 404, "dostal jsem $status");
+	[$status, $salesCust] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow&customerId=" . \rawurlencode($customerId), $token);
+	check('report tržeb jednoho zákazníka', $status === 200 && ($salesCust['filter']['customerId'] ?? null) === $customerId, "status $status");
+	[$status] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow&customerId=nesmysl-neexistuje", $token);
+	check('neznámý zákazník v reportu tržeb je 404', $status === 404, "dostal jsem $status");
 	[$status, $summary] = request("$baseUrl/v1/customers/" . \rawurlencode($customerId) . '/summary', $token);
 	check('souhrn zákazníka', $status === 200 && \is_int($summary['orders'] ?? null) && isMoney($summary['revenue'] ?? null) && isMoney($summary['outstanding'] ?? null));
 
