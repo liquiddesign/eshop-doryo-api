@@ -108,7 +108,7 @@ final class ReportsEndpoint extends BaseEndpoint
 			'name' => "MAX(ci.productName$suffix)",
 			'quantity' => 'SUM(ci.amount)',
 			'revenue' => 'SUM(ci.priceVat * ci.amount)',
-		])
+		], null, $filter === null)
 			->setGroupBy(['ci.fk_product'])
 			->orderBy(['revenue' => 'DESC'])
 			->setTake($query->limit());
@@ -1025,7 +1025,7 @@ final class ReportsEndpoint extends BaseEndpoint
 			'orders' => 'COUNT(DISTINCT o.fk_purchase)',
 			'revenue' => 'SUM(ci.priceVat * ci.amount)',
 			'revenueWithoutVat' => 'SUM(ci.price * ci.amount)',
-		], $purchases);
+		], $purchases, $filter === null);
 
 		if ($filter !== null) {
 			$rows->where($filter['sql'], $filter['values']);
@@ -1155,7 +1155,7 @@ final class ReportsEndpoint extends BaseEndpoint
 			'orders' => 'COUNT(DISTINCT o.uuid)',
 			'revenue' => 'SUM(ci.priceVat * ci.amount)',
 			'revenueWithoutVat' => 'SUM(ci.price * ci.amount)',
-		], $purchases)
+		], $purchases, false)
 			->where($filter['sql'], $filter['values'])
 			->setGroupBy(['reportKey'])
 			->orderBy(['reportKey' => 'ASC']);
@@ -1184,10 +1184,16 @@ final class ReportsEndpoint extends BaseEndpoint
 		return $items;
 	}
 
-	private function itemSales(string $from, string $to, array $select, ?array $purchases = null): GenericCollection
+	private function itemSales(string $from, string $to, array $select, ?array $purchases = null, bool $straight = true): GenericCollection
 	{
-		$first = (string) \array_key_first($select);
-		$select[$first] = 'STRAIGHT_JOIN ' . $select[$first];
+		// Bez filtru vede dotaz od objednávek (index createdTs) — optimalizátor by jinak sáhl na celou
+		// tabulku položek. S filtrem kategorie/výrobce se pořadí nechává na něm: může začít od položek
+		// té kategorie přes index eshop_cartitem(fk_product), což je u malé kategorie o řád levnější
+		// než projít všechny položky okna (Levior: report po kategoriích za 3 měsíce = 10 s).
+		if ($straight) {
+			$first = (string) \array_key_first($select);
+			$select[$first] = 'STRAIGHT_JOIN ' . $select[$first];
+		}
 
 		$rows = $this->connection->rows(['o' => 'eshop_order'], $select)
 			->join(['c' => 'eshop_cart'], 'c.fk_purchase = o.fk_purchase', [], 'INNER')

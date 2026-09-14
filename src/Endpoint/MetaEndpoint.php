@@ -56,6 +56,11 @@ final class MetaEndpoint extends BaseEndpoint
 				. 'celou tabulku objednávek. Založ ho v projektu shopu — README balíku, oddíl „Indexy".';
 		}
 
+		if (!$this->codebooks->hasIndex('eshop_cartitem', 'fk_product')) {
+			$warnings[] = 'Chybí index na eshop_cartitem(fk_product): reporty zúžené na kategorii nebo výrobce '
+				. 'nemůžou začít od položek té kategorie a procházejí všechny položky okna.';
+		}
+
 		return new Response([
 			'status' => 'ok',
 			'service' => 'eshop-doryo-api',
