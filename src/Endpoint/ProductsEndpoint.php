@@ -12,6 +12,7 @@ use DoryoApi\Http\Response;
 use DoryoApi\Mapper\ProductMapper;
 use DoryoApi\Support\Dates;
 use DoryoApi\Support\ProductCode;
+use DoryoApi\Support\ProductFilter;
 use Eshop\DB\Product;
 use Nette\Utils\Strings;
 use StORM\Collection;
@@ -71,6 +72,11 @@ final class ProductsEndpoint extends BaseEndpoint
 
 		if ($category = $query->string('category')) {
 			$this->filterByCategory($collection, $category, $suffix);
+		}
+
+		if ($producer = $query->string('producer')) {
+			$f = ProductFilter::producer($this->connection, $producer, $suffix, 'this.uuid');
+			$collection->where($f === null ? '1=0' : $f['sql'], $f === null ? [] : $f['values']);
 		}
 
 		$hasCreatedTs = $this->codebooks->hasColumn('eshop_product', 'createdTs');
@@ -238,30 +244,15 @@ final class ProductsEndpoint extends BaseEndpoint
 	 */
 	private function filterByCategory(Collection $collection, string $category, string $suffix): void
 	{
-		$paths = $this->connection->rows(['c' => 'eshop_category'], ['path' => 'c.path'])
-			->where("c.uuid = :apiCat OR c.code = :apiCat OR c.name$suffix = :apiCat", ['apiCat' => $category]);
+		$f = ProductFilter::category($this->connection, $category, $suffix, 'this.uuid');
 
-		$conditions = [];
-		$values = [];
-		$index = 0;
-
-		foreach ($paths as $row) {
-			$key = 'apiPath' . $index++;
-			$conditions[] = "cat.path LIKE :$key";
-			$values[$key] = $row->path . '%';
-		}
-
-		if (!$conditions) {
+		if ($f === null) {
 			$collection->where('1=0');
 
 			return;
 		}
 
-		$collection->where(
-			'this.uuid IN (SELECT nxn.fk_product FROM eshop_product_nxn_eshop_category nxn
-				JOIN eshop_category cat ON cat.uuid = nxn.fk_category WHERE ' . \implode(' OR ', $conditions) . ')',
-			$values,
-		);
+		$collection->where($f['sql'], $f['values']);
 	}
 
 	/**

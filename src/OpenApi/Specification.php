@@ -188,6 +188,7 @@ final class Specification
 					$this->param('code', 'Kód produktu (přesná shoda); podkód se bere s vodicí nulou i bez ní, tedy 37214.01 i 37214.1.'),
 					$this->param('ean', 'EAN produktu (přesná shoda).'),
 					$this->param('category', 'Kategorie — id, kód nebo název; zahrne i podkategorie.'),
+					$this->param('producer', 'Výrobce — id nebo název.'),
 					$this->param('since', 'Jen produkty založené od tohoto data.'),
 					$this->param('active', 'false = vrátí i smazané a rozpracované produkty (výchozí true).', 'boolean'),
 					$this->param('attribute', 'Filtr podle parametru ve tvaru název:hodnota, víc dvojic přes čárku (platí AND).'),
@@ -217,12 +218,17 @@ final class Specification
 			),
 			'/v1/reports/sales' => $this->operation(
 				'Report tržeb',
-				'Počty objednávek a tržby seskupené po měsících, týdnech, dnech, obchodnících nebo kategoriích. '
-					. 'Zrušené objednávky se nepočítají. S minItems/maxItems se dá zúžit na objednávky dané '
-					. 'velikosti — třeba „po měsících, jen objednávky nad deset položek" jedním dotazem.',
+				'Počty objednávek a tržby seskupené po měsících, týdnech, dnech, obchodnících, zákaznících, kategoriích '
+					. 'nebo výrobcích. Zrušené objednávky se nepočítají. S minItems/maxItems se dá zúžit na objednávky dané '
+					. 'velikosti — třeba „po měsících, jen objednávky nad deset položek" jedním dotazem. S category nebo '
+					. 'producer se report zúží na položky té kategorie (i podkategorií) nebo toho výrobce — třeba „kteří '
+					. 'zákazníci berou nože" = groupBy=customer&category=Nože, nebo vývoj po měsících groupBy=month; '
+					. 'tržba je pak z položek (bez dopravy a platby) a odpověď nese filter s tím, co se našlo.',
 				[
 					...$this->windowParams(),
 					$this->param('groupBy', 'Seskupení: month (výchozí), week, day, merchant, customer, category, producer.'),
+					$this->param('category', 'Jen položky z kategorie — id, kód nebo název; zahrne i podkategorie. Neznámá je 400.'),
+					$this->param('producer', 'Jen položky od výrobce — id nebo název. Neznámý je 400.'),
 					$this->param('minItems', 'Jen objednávky s aspoň tolika položkami.', 'integer'),
 					$this->param('maxItems', 'Jen objednávky s nejvýš tolika položkami.', 'integer'),
 				],
@@ -456,9 +462,12 @@ final class Specification
 			),
 			'/v1/reports/top-products' => $this->operation(
 				'Nejprodávanější produkty',
-				'Produkty seřazené podle tržby za období.',
+				'Produkty seřazené podle tržby za období. S category nebo producer jen z té kategorie (i podkategorií) '
+					. 'nebo od toho výrobce.',
 				[
 					...$this->windowParams(),
+					$this->param('category', 'Jen produkty z kategorie — id, kód nebo název; zahrne i podkategorie. Neznámá je 400.'),
+					$this->param('producer', 'Jen produkty od výrobce — id nebo název. Neznámý je 400.'),
 					$this->ref('Limit'),
 				],
 				'TopProductList',

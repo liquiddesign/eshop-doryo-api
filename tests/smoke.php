@@ -240,6 +240,28 @@ check('produkt má cenu jako řetězec', isMoney($product['price'] ?? null) && i
 [, $sales] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow", $token);
 check('report tržeb má klíč a částky', isset($sales['items'][0]['key']) && isMoney($sales['items'][0]['revenue']));
 
+// Filtr kategorie a výrobce: tržba z položek, kategorie i s podkategoriemi; neznámá kategorie je 400, ne prázdný report
+[, $categories] = request("$baseUrl/v1/categories", $token);
+$categoryName = null;
+
+foreach ($categories['items'] ?? [] as $cat) {
+	if (!empty($cat['name'])) {
+		$categoryName = $cat['name'];
+
+		break;
+	}
+}
+
+if ($categoryName !== null) {
+	[$status, $salesCat] = request("$baseUrl/v1/reports/sales?groupBy=customer$reportWindow&category=" . \rawurlencode($categoryName), $token);
+	check('report tržeb po zákaznících v kategorii', $status === 200 && \is_array($salesCat['items'] ?? null) && ($salesCat['filter']['category'] ?? null) !== null, "status $status");
+	[$status, $topCat] = request("$baseUrl/v1/reports/top-products?limit=3$reportWindow&category=" . \rawurlencode($categoryName), $token);
+	check('top produkty v kategorii', $status === 200 && \is_array($topCat['items'] ?? null), "status $status");
+}
+
+[$status] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow&category=nesmysl-neexistuje", $token);
+check('neznámá kategorie v reportu tržeb je 400', $status === 400, "dostal jsem $status");
+
 echo "\nzákazník a jeho doklady\n";
 $customerId = null;
 
