@@ -12,6 +12,7 @@ use DoryoApi\Support\Dates;
 use DoryoApi\Support\Merchants;
 use DoryoApi\Support\Money;
 use DoryoApi\Support\OrderTotals;
+use DoryoApi\Support\ProductFilter;
 use DoryoApi\Support\Sql;
 use Nette\Utils\Arrays;
 use StORM\GenericCollection;
@@ -70,13 +71,22 @@ final class ReportsEndpoint extends BaseEndpoint
 			? null
 			: $this->purchasesByItemCount($this->purchasesInWindow($from, $to), $minItems, $maxItems);
 
-		$items = match ($groupBy) {
-			'category' => $this->salesByItems($from, $to, 'category', $purchases),
-			'producer' => $this->salesByItems($from, $to, 'producer', $purchases),
+		// Zúžení na kategorii nebo výrobce: tržba se pak počítá z položek, ne z ceny objednávky —
+		// doprava a platba do kategorie nepatří. „Graf odběru zákazníků nad kategorií nože" jinak
+		// z API poskládat nešlo (Levior, 14. 9. 2026).
+		$filter = $this->itemFilter($query, $this->connection->getMutationSuffix());
+
+		$items = match (true) {
+			$filter !== null && ($groupBy === 'category' || $groupBy === 'producer') => $this->salesByItems($from, $to, $groupBy, $purchases, $filter),
+			$filter !== null => $this->salesByPeriodFromItems($groupBy, $from, $to, $filter, $purchases),
+			$groupBy === 'category' => $this->salesByItems($from, $to, 'category', $purchases),
+			$groupBy === 'producer' => $this->salesByItems($from, $to, 'producer', $purchases),
 			default => $this->salesByPeriod($groupBy, $from, $to, $purchases),
 		};
 
-		return Response::list($items, null);
+		$response = Response::list($items, null);
+
+		return $filter !== null ? $response->withExtra(self::filterExtra($filter)) : $response;
 	}
 
 	/**
@@ -90,6 +100,8 @@ final class ReportsEndpoint extends BaseEndpoint
 		$suffix = $this->connection->getMutationSuffix();
 		$currency = $this->config->getCurrency();
 
+		$filter = $this->itemFilter($query, $suffix);
+
 		$rows = $this->itemSales($from, $to, [
 			'productId' => 'ci.fk_product',
 			'code' => 'MAX(ci.productCode)',
@@ -100,6 +112,10 @@ final class ReportsEndpoint extends BaseEndpoint
 			->setGroupBy(['ci.fk_product'])
 			->orderBy(['revenue' => 'DESC'])
 			->setTake($query->limit());
+
+		if ($filter !== null) {
+			$rows->where($filter['sql'], $filter['values']);
+		}
 
 		$items = [];
 
@@ -113,7 +129,9 @@ final class ReportsEndpoint extends BaseEndpoint
 			];
 		}
 
-		return Response::list($items, null);
+		$response = Response::list($items, null);
+
+		return $filter !== null ? $response->withExtra(self::filterExtra($filter)) : $response;
 	}
 
 	/**
@@ -991,7 +1009,7 @@ final class ReportsEndpoint extends BaseEndpoint
 	 * @param array<string>|null $purchases
 	 * @return array<array<string, mixed>>
 	 */
-	private function salesByItems(string $from, string $to, string $dimension, ?array $purchases = null): array
+	private function salesByItems(string $from, string $to, string $dimension, ?array $purchases = null, ?array $filter = null): array
 	{
 		if ($purchases === []) {
 			return [];
@@ -1008,6 +1026,10 @@ final class ReportsEndpoint extends BaseEndpoint
 			'revenue' => 'SUM(ci.priceVat * ci.amount)',
 			'revenueWithoutVat' => 'SUM(ci.price * ci.amount)',
 		], $purchases);
+
+		if ($filter !== null) {
+			$rows->where($filter['sql'], $filter['values']);
+		}
 
 		if ($dimension === 'category') {
 			// hlavní kategorie jako poddotaz: jedna na produkt, jinak by se položka sečetla za každou
@@ -1047,6 +1069,121 @@ final class ReportsEndpoint extends BaseEndpoint
 	 * @param array<string, string> $select
 	 * @param array<string>|null $purchases zúžení na nákupy (filtr podle počtu položek)
 	 */
+	/**
+	 * Zúžení reportu na položky jedné kategorie (i s podkategoriemi) nebo jednoho výrobce.
+	 * Neznámá kategorie či výrobce je 400 — tichý prázdný report by model četl jako „nic se neprodalo".
+	 * @return array{sql: string, values: array<string, string>, popis: array<string, string>}|null
+	 */
+	private function itemFilter(Query $query, string $suffix): ?array
+	{
+		$category = $query->string('category');
+		$producer = $query->string('producer');
+
+		if ($category === null && $producer === null) {
+			return null;
+		}
+
+		$sql = [];
+		$values = [];
+		$popis = [];
+
+		if ($category !== null) {
+			$f = ProductFilter::category($this->connection, $category, $suffix, 'ci.fk_product');
+
+			if ($f === null) {
+				throw ApiException::badRequest("Kategorie $category neexistuje — hledá se podle id, kódu nebo názvu; seznam dá /v1/categories.");
+			}
+
+			$sql[] = $f['sql'];
+			$values += $f['values'];
+			$popis['category'] = $f['nazev'];
+		}
+
+		if ($producer !== null) {
+			$f = ProductFilter::producer($this->connection, $producer, $suffix, 'ci.fk_product');
+
+			if ($f === null) {
+				throw ApiException::badRequest("Výrobce $producer neexistuje — hledá se podle id nebo názvu.");
+			}
+
+			$sql[] = $f['sql'];
+			$values += $f['values'];
+			$popis['producer'] = $f['nazev'];
+		}
+
+		return ['sql' => '(' . \implode(' AND ', $sql) . ')', 'values' => $values, 'popis' => $popis];
+	}
+
+	/**
+	 * @param array{popis: array<string, string>} $filter
+	 * @return array<string, mixed>
+	 */
+	private static function filterExtra(array $filter): array
+	{
+		return [
+			'filter' => $filter['popis'],
+			'note' => 'S filtrem kategorie nebo výrobce se tržba počítá z položek objednávek (bez dopravy a platby), '
+				. 'kategorie zahrnuje podkategorie a orders je počet objednávek, ve kterých se položka objevila.',
+		];
+	}
+
+	/**
+	 * Tržby po obdobích, zákaznících nebo obchodnících spočítané z položek — když je report zúžený
+	 * na kategorii nebo výrobce, cena objednávky nedává smysl (doprava a platba do kategorie nepatří).
+	 * @param array{sql: string, values: array<string, string>} $filter
+	 * @param array<string>|null $purchases
+	 * @return array<array<string, mixed>>
+	 */
+	private function salesByPeriodFromItems(string $groupBy, string $from, string $to, array $filter, ?array $purchases = null): array
+	{
+		if ($purchases === []) {
+			return [];
+		}
+
+		$key = match ($groupBy) {
+			'month' => "DATE_FORMAT(o.createdTs, '%Y-%m')",
+			'week' => "DATE_FORMAT(o.createdTs, '%x-W%v')",
+			'day' => 'DATE(o.createdTs)',
+			'customer' => "IFNULL(IFNULL(cu.company, cu.fullname), 'bez zákazníka')",
+			default => "IFNULL(m.fullname, 'bez obchodníka')",
+		};
+
+		$currency = $this->config->getCurrency();
+
+		$rows = $this->itemSales($from, $to, [
+			'reportKey' => $key,
+			'orders' => 'COUNT(DISTINCT o.uuid)',
+			'revenue' => 'SUM(ci.priceVat * ci.amount)',
+			'revenueWithoutVat' => 'SUM(ci.price * ci.amount)',
+		], $purchases)
+			->where($filter['sql'], $filter['values'])
+			->setGroupBy(['reportKey'])
+			->orderBy(['reportKey' => 'ASC']);
+
+		if ($groupBy === 'merchant') {
+			$rows->join(['pu' => 'eshop_purchase'], 'pu.uuid = o.fk_purchase', [], 'INNER')
+				->join(['m' => 'eshop_merchant'], 'm.uuid = pu.fk_merchant');
+		}
+
+		if ($groupBy === 'customer') {
+			$rows->join(['pu' => 'eshop_purchase'], 'pu.uuid = o.fk_purchase', [], 'INNER')
+				->join(['cu' => 'eshop_customer'], 'cu.uuid = pu.fk_customer');
+		}
+
+		$items = [];
+
+		foreach ($rows as $row) {
+			$items[] = [
+				'key' => (string) $row->reportKey,
+				'orders' => (int) $row->orders,
+				'revenue' => Money::format($row->revenue, $currency),
+				'revenueWithoutVat' => Money::format($row->revenueWithoutVat, $currency),
+			];
+		}
+
+		return $items;
+	}
+
 	private function itemSales(string $from, string $to, array $select, ?array $purchases = null): GenericCollection
 	{
 		$first = (string) \array_key_first($select);

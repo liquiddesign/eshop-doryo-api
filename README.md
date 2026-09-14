@@ -203,6 +203,11 @@ menší `limit` nepomohl. Okno „mívali objednávky" je výchozí okno report�
 nečinnosti a `from` ho posouvá; `merchantId` zúží report na zákazníky jednoho obchodníka
 (sloupec i vazební tabulka M:N).
 
+Reporty `sales` a `top-products` berou `category` a `producer` (id, kód nebo název; kategorie
+i s podkategoriemi): tržba se pak počítá z položek objednávek, ne z ceny objednávky, a odpověď
+nese `filter` s tím, co se našlo. „Kteří zákazníci berou nože" je jedno volání
+(`groupBy=customer&category=Nože`), stejně jako vývoj po měsících; do 1.8.1 to z API poskládat nešlo.
+
 Cesty zákazníka podle id (`/v1/customers/{id}`, `/orders`, `/invoices`, `/summary`, `/products`,
 `/prices`) berou `merchantId` jako **ověření vlastnictví**: zákazník, který obchodníkovi nepatří,
 je 404, jako by neexistoval. Odpovědi těch cest vlastníka nenesou, takže Kolego jinak „obchodník
