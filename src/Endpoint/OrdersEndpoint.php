@@ -12,6 +12,7 @@ use DoryoApi\Http\Response;
 use DoryoApi\Mapper\ItemMapper;
 use DoryoApi\Mapper\OrderMapper;
 use DoryoApi\Support\Dates;
+use DoryoApi\Support\Merchants;
 use DoryoApi\Support\OrderStates;
 use DoryoApi\Support\OrderTotals;
 use Eshop\DB\Address;
@@ -66,10 +67,7 @@ final class OrdersEndpoint extends BaseEndpoint
 	 */
 	public function detail(array $params, Query $query): Response
 	{
-		unset($query);
-
-		/** @var \Eshop\DB\Order $order */
-		$order = $this->one(Order::class, $params['id'], 'Objednávka');
+		$order = $this->ownedOrder($params['id'], $query);
 		$extras = $this->loadExtras([$order->getPK() => $order]);
 		$extra = $extras[$order->getPK()];
 		$extra['items'] = $this->loadItems($extra['purchase']);
@@ -128,7 +126,7 @@ final class OrdersEndpoint extends BaseEndpoint
 		}
 
 		if ($merchantId = $query->string('merchantId')) {
-			$collection->where('purchase.fk_merchant', $merchantId);
+			$collection->where(Merchants::orderCondition($this->codebooks, 'purchase'), ['apiMerchant' => $merchantId]);
 		}
 
 		if ($since = $query->dateTime('since')) {
@@ -186,7 +184,7 @@ final class OrdersEndpoint extends BaseEndpoint
 	 */
 	public function history(array $params, Query $query): Response
 	{
-		$this->one(Order::class, $params['id'], 'Objednávka');
+		$this->ownedOrder($params['id'], $query);
 
 		$collection = $this->connection->rows(['l' => 'eshop_orderlogitem'], [
 			'id' => 'l.uuid',
@@ -220,9 +218,7 @@ final class OrdersEndpoint extends BaseEndpoint
 	 */
 	public function shipments(array $params, Query $query): Response
 	{
-		unset($query);
-
-		$this->one(Order::class, $params['id'], 'Objednávka');
+		$this->ownedOrder($params['id'], $query);
 		$suffix = $this->connection->getMutationSuffix();
 
 		$deliveries = $this->connection->rows(['d' => 'eshop_delivery'], [

@@ -71,6 +71,16 @@ final class DoryoApiDI extends CompilerExtension
 			// eshop 2.2 vede sazbu DPH produktu po zemích (eshop_productvatrate) — API bere sazbu této
 			// země; starší eshopy mají sazbu přímo na produktu a volbu ignorují
 			'vatCountry' => Expect::string('CZ'),
+			// Komu patří záznam při `?merchantId=`. Výchozí hodnoty drží chování do 1.11.
+			'merchantScope' => Expect::structure([
+				// placed = objednávky, které obchodník zadal (purchase.fk_merchant);
+				// customers = objednávky jeho zákazníků (a k tomu ty, které zadal) — jako admin Forbaby
+				'orders' => Expect::anyOf('placed', 'customers')->default('placed'),
+				// obchodník vidí i zákazníky přímých podřízených (eshop_merchant_nxn_subordinate)
+				'subordinates' => Expect::bool(false),
+				// k zákazníkům obchodníka patří i ti ze skupin, které má přiřazené
+				'customerGroups' => Expect::bool(false),
+			]),
 			// ceny konkrétního zákazníka jsou vědomá výjimka — ve výchozím stavu vypnuté
 			'customerPrices' => Expect::bool(false),
 			'userfilesDir' => Expect::string()->nullable(),
@@ -116,6 +126,9 @@ final class DoryoApiDI extends CompilerExtension
 				'orderStates' => $config->orderStates,
 				'invoicePaymentTracked' => $config->invoicePaymentTracked,
 				'vatCountry' => $config->vatCountry,
+				'merchantOrders' => $config->merchantScope->orders,
+				'merchantSubordinates' => $config->merchantScope->subordinates,
+				'merchantCustomerGroups' => $config->merchantScope->customerGroups,
 				'customerPricesEnabled' => $config->customerPrices,
 				'userfilesDir' => $config->userfilesDir ?? $builder->parameters['wwwDir'] . '/userfiles',
 				'imageSizes' => $config->imageSizes,

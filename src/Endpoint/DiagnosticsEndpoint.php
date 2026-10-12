@@ -214,10 +214,7 @@ final class DiagnosticsEndpoint extends BaseEndpoint
 	 */
 	public function invoicePayment(array $params, Query $query): Response
 	{
-		unset($query);
-
-		/** @var \Eshop\DB\Invoice $invoice */
-		$invoice = $this->one(Invoice::class, $params['id'], 'Faktura');
+		$invoice = $this->ownedInvoice($params['id'], $query);
 		$currency = $this->codebooks->getCurrencyCode(self::idValue($invoice, 'currency'));
 		$tracked = $this->config->isInvoicePaymentTracked();
 		$total = (float) $invoice->totalPriceVat;

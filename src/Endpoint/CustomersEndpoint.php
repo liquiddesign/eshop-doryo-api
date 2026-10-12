@@ -286,29 +286,13 @@ final class CustomersEndpoint extends BaseEndpoint
 	}
 
 	/**
-	 * Zákazníci jednoho obchodníka — přes sloupec i vazební tabulku, podle toho, co shop vede
-	 * (viz {@see Merchants}).
+	 * Zákazníci jednoho obchodníka — přes sloupec, vazební tabulku, podřízené a skupiny podle toho,
+	 * co shop vede a co chce config (viz {@see Merchants}).
 	 * @param \StORM\Collection<\Eshop\DB\Customer> $collection
 	 */
 	private function whereMerchant(Collection $collection, string $merchantId): void
 	{
-		$parts = [];
-
-		if ($this->codebooks->hasColumn(Merchants::CUSTOMER_TABLE, 'fk_merchant')) {
-			$parts[] = 'this.fk_merchant = :apiMerchant';
-		}
-
-		if ($this->codebooks->hasColumn(self::MERCHANT_NXN_TABLE, 'fk_merchant')) {
-			$parts[] = 'this.uuid IN (SELECT nxn.fk_customer FROM ' . self::MERCHANT_NXN_TABLE . ' nxn WHERE nxn.fk_merchant = :apiMerchant)';
-		}
-
-		if (!$parts) {
-			$collection->where('1 = 0');
-
-			return;
-		}
-
-		$collection->where('(' . \implode(' OR ', $parts) . ')', ['apiMerchant' => $merchantId]);
+		$collection->where(Merchants::customerCondition($this->codebooks, 'this.uuid'), ['apiMerchant' => $merchantId]);
 	}
 
 	/**

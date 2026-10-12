@@ -14,6 +14,8 @@ use DoryoApi\Support\Merchants;
 use DoryoApi\Support\ProductCode;
 use DoryoApi\Support\Sql;
 use Eshop\DB\Customer;
+use Eshop\DB\Invoice;
+use Eshop\DB\Order;
 use StORM\Collection;
 use StORM\DIConnection;
 use StORM\Entity;
@@ -307,6 +309,42 @@ abstract class BaseEndpoint implements Endpoint
 		}
 
 		return $customer;
+	}
+
+	/**
+	 * Objednávka pro cesty podle id, s ověřením vlastnictví jako {@see ownedCustomer()}: s `merchantId`
+	 * se vydá, jen když patří obchodníkovi (podle `merchantScope.orders` ta, kterou zadal, nebo objednávka
+	 * jeho zákazníka), jinak 404.
+	 */
+	protected function ownedOrder(string $id, Query $query): Order
+	{
+		$merchantId = $query->string('merchantId');
+
+		/** @var \Eshop\DB\Order $order */
+		$order = $this->one(Order::class, $id, 'Objednávka');
+
+		if ($merchantId !== null && !Merchants::ownsOrder($this->connection, $this->codebooks, $order->getPK(), $merchantId)) {
+			throw ApiException::notFound("Objednávka $id neexistuje nebo nepatří obchodníkovi $merchantId.");
+		}
+
+		return $order;
+	}
+
+	/**
+	 * Faktura pro cesty podle id, s ověřením vlastnictví: s `merchantId` jen faktura zákazníka obchodníka, jinak 404.
+	 */
+	protected function ownedInvoice(string $id, Query $query): Invoice
+	{
+		$merchantId = $query->string('merchantId');
+
+		/** @var \Eshop\DB\Invoice $invoice */
+		$invoice = $this->one(Invoice::class, $id, 'Faktura');
+
+		if ($merchantId !== null && !Merchants::ownsInvoice($this->connection, $this->codebooks, $invoice->getPK(), $merchantId)) {
+			throw ApiException::notFound("Faktura $id neexistuje nebo nepatří obchodníkovi $merchantId.");
+		}
+
+		return $invoice;
 	}
 
 	/**

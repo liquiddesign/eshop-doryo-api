@@ -11,6 +11,7 @@ use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
 use DoryoApi\Mapper\InvoiceMapper;
 use DoryoApi\Mapper\ItemMapper;
+use DoryoApi\Support\Merchants;
 use Eshop\DB\Address;
 use Eshop\DB\Invoice;
 use Eshop\DB\InvoiceItem;
@@ -60,10 +61,7 @@ final class InvoicesEndpoint extends BaseEndpoint
 	 */
 	public function detail(array $params, Query $query): Response
 	{
-		unset($query);
-
-		/** @var \Eshop\DB\Invoice $invoice */
-		$invoice = $this->one(Invoice::class, $params['id'], 'Faktura');
+		$invoice = $this->ownedInvoice($params['id'], $query);
 		$extras = $this->loadExtras([$invoice->getPK() => $invoice]);
 		$extra = $extras[$invoice->getPK()];
 		$extra['items'] = $this->loadItems($invoice);
@@ -117,6 +115,11 @@ final class InvoicesEndpoint extends BaseEndpoint
 
 		if ($registrationNo = $query->string('registrationNo')) {
 			$collection->where('this.ic', $registrationNo);
+		}
+
+		// faktura patří obchodníkovi přes zákazníka — kdo ji vystavil, eshop nevede
+		if ($merchantId = $query->string('merchantId')) {
+			$collection->where(Merchants::customerCondition($this->codebooks, 'this.fk_customer'), ['apiMerchant' => $merchantId]);
 		}
 
 		if ($query->bool('withoutOrder', false)) {

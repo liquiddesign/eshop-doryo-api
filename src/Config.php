@@ -18,7 +18,7 @@ final class Config
 	 * Verze balíku, když se nedá zjistit z Composeru (balík nasazený mimo composer install).
 	 * Skutečná verze se bere z tagu přes {@see version()}, aby s vydáním nedriftovala.
 	 */
-	public const VERSION = '1.11.0';
+	public const VERSION = '1.12.0';
 
 	/** Normalizované stavy objednávek, které API vrací v poli `status`. */
 	public const ORDER_STATUSES = ['new', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
@@ -45,6 +45,9 @@ final class Config
 	 * @param int $defaultWindowMonths Výchozí okno seznamů a reportů bez data; velký shop si ho zkrátí
 	 * @param int $maxWindowMonths Nejdelší okno, které API přijme
 	 * @param string $vatCountry Země, jejíž sazbu DPH produktu API bere (eshop 2.2 je vede po zemích)
+	 * @param string $merchantOrders Objednávky obchodníka: `placed` (které zadal) nebo `customers` (jeho zákazníků)
+	 * @param bool $merchantSubordinates Obchodník vidí i zákazníky svých přímých podřízených
+	 * @param bool $merchantCustomerGroups K zákazníkům obchodníka patří i ti z jeho skupin zákazníků
 	 */
 	public function __construct(
 		private string $prefix = 'doryo-api',
@@ -74,7 +77,28 @@ final class Config
 		private int $defaultWindowMonths = 6,
 		private int $maxWindowMonths = 24,
 		private string $vatCountry = 'CZ',
+		private string $merchantOrders = 'placed',
+		private bool $merchantSubordinates = false,
+		private bool $merchantCustomerGroups = false,
 	) {
+	}
+
+	/**
+	 * Objednávky obchodníka jsou objednávky jeho zákazníků (`customers`), ne jen ty, které sám zadal (`placed`).
+	 */
+	public function merchantOrdersByCustomers(): bool
+	{
+		return $this->merchantOrders === 'customers';
+	}
+
+	public function merchantIncludesSubordinates(): bool
+	{
+		return $this->merchantSubordinates;
+	}
+
+	public function merchantIncludesCustomerGroups(): bool
+	{
+		return $this->merchantCustomerGroups;
 	}
 
 	public function getVatCountry(): string
