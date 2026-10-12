@@ -286,25 +286,29 @@ final class CustomersEndpoint extends BaseEndpoint
 	}
 
 	/**
-	 * Zákazníci jednoho obchodníka.
-	 *
-	 * Vazba je v eshopu dvojí: sloupec `eshop_customer.fk_merchant` a vazební tabulka. Shop může
-	 * používat jen jednu z nich — na Levioru je sloupec prázdný u všech osmnácti tisíc zákazníků
-	 * a vazba jde čistě přes M:N, takže filtr přes sloupec tam nevracel nic. Ptáme se proto na obojí.
+	 * Zákazníci jednoho obchodníka — přes sloupec i vazební tabulku, podle toho, co shop vede
+	 * (viz {@see Merchants}).
 	 * @param \StORM\Collection<\Eshop\DB\Customer> $collection
 	 */
 	private function whereMerchant(Collection $collection, string $merchantId): void
 	{
-		if (!$this->codebooks->hasColumn(self::MERCHANT_NXN_TABLE, 'fk_merchant')) {
-			$collection->where('this.fk_merchant', $merchantId);
+		$parts = [];
+
+		if ($this->codebooks->hasColumn(Merchants::CUSTOMER_TABLE, 'fk_merchant')) {
+			$parts[] = 'this.fk_merchant = :apiMerchant';
+		}
+
+		if ($this->codebooks->hasColumn(self::MERCHANT_NXN_TABLE, 'fk_merchant')) {
+			$parts[] = 'this.uuid IN (SELECT nxn.fk_customer FROM ' . self::MERCHANT_NXN_TABLE . ' nxn WHERE nxn.fk_merchant = :apiMerchant)';
+		}
+
+		if (!$parts) {
+			$collection->where('1 = 0');
 
 			return;
 		}
 
-		$collection->where(
-			'this.fk_merchant = :apiMerchant OR this.uuid IN (SELECT nxn.fk_customer FROM ' . self::MERCHANT_NXN_TABLE . ' nxn WHERE nxn.fk_merchant = :apiMerchant)',
-			['apiMerchant' => $merchantId],
-		);
+		$collection->where('(' . \implode(' OR ', $parts) . ')', ['apiMerchant' => $merchantId]);
 	}
 
 	/**
@@ -318,7 +322,8 @@ final class CustomersEndpoint extends BaseEndpoint
 	{
 		$map = [];
 
-		try {
+		// sloupec některé verze eshopu nemají (Forbaby) — pak rovnou do vazební tabulky
+		if ($this->codebooks->hasColumn(Merchants::CUSTOMER_TABLE, 'fk_merchant')) {
 			$rows = $this->connection->rows(['c' => 'eshop_customer'], ['id' => 'c.uuid', 'merchant' => 'c.fk_merchant'])
 				->where('c.uuid', $ids)
 				->where('c.fk_merchant IS NOT NULL');
@@ -326,8 +331,6 @@ final class CustomersEndpoint extends BaseEndpoint
 			foreach ($rows as $row) {
 				$map[$row->id] = $row->merchant;
 			}
-		} catch (\Throwable) {
-			return [];
 		}
 
 		$missing = \array_values(\array_diff($ids, \array_keys($map)));
