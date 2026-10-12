@@ -16,6 +16,7 @@ use DoryoApi\Support\ProductFilter;
 use DoryoApi\Support\Sql;
 use Eshop\DB\Customer;
 use Nette\Utils\Arrays;
+use Nette\Utils\Strings;
 use StORM\GenericCollection;
 
 /**
@@ -26,6 +27,12 @@ use StORM\GenericCollection;
  */
 final class ReportsEndpoint extends BaseEndpoint
 {
+	/** Měna reportu, když shop vede víc měn; null = jedna měna, částky se nefiltrují. */
+	private ?string $reportCurrency = null;
+
+	/** @var array<string> měny, které report vynechal */
+	private array $otherCurrencies = [];
+
 	private const GROUP_BY = ['month', 'week', 'day', 'merchant', 'customer', 'category', 'producer', 'newVsReturning'];
 	private const PERIOD_GROUPS = ['month', 'week', 'day'];
 	private const COMPARE_MODES = ['lastYear', 'previous'];
@@ -99,7 +106,7 @@ final class ReportsEndpoint extends BaseEndpoint
 
 		if ($compare !== null) {
 			$previous = $this->salesItems($groupBy, $compare['from'], $compare['to'], $filter, $purchaseFilter, $purchasesFor($compare['from'], $compare['to']));
-			$items = self::attachCompare($items, $previous, $groupBy, $compare['mode'], $this->config->getCurrency());
+			$items = self::attachCompare($items, $previous, $groupBy, $compare['mode'], $this->reportCurrencyCode());
 			$extra['compareWindow'] = $compare;
 			$extra['compareNote'] = 'compare je totéž seskupení za srovnávací období: u měsíců, týdnů a dnů se lastYear páruje '
 				. 'o rok posunutým klíčem a previous podle pořadí, jinak podle klíče; klíče jen ve srovnávacím období se '
@@ -119,6 +126,7 @@ final class ReportsEndpoint extends BaseEndpoint
 			$items = \array_slice($items, 0, $limit);
 		}
 
+		$extra += $this->currencyExtra();
 		$response = Response::list($items, null);
 
 		return $extra ? $response->withExtra($extra) : $response;
@@ -240,14 +248,18 @@ final class ReportsEndpoint extends BaseEndpoint
 	/**
 	 * Zúžení na nákupy jednoho obchodníka (zákazníci z jeho sloupce i vazební tabulky — ne kdo
 	 * objednávku zadal) nebo jednoho zákazníka. Neznámý zákazník je 404 jako u jeho detailu.
-	 * @return array{merchantId?: string, customerId?: string, popis: array<string, string>}|null
+	 *
+	 * Shop s víc měnami (Forbaby: CZK a EUR) počítá report jen z nákupů v jedné měně — z `currency`,
+	 * jinak ve výchozí měně configu. Dřív se částky v různých měnách sčítaly a označily výchozí měnou.
+	 * @return array{merchantId?: string, customerId?: string, currencyIds?: array<string>, popis: array<string, string>}|null
 	 */
 	private function purchaseFilter(Query $query): ?array
 	{
 		$merchantId = $query->string('merchantId');
 		$customerId = $query->string('customerId');
+		$currency = $this->currencyFilter($query);
 
-		if ($merchantId === null && $customerId === null) {
+		if ($merchantId === null && $customerId === null && $currency === null) {
 			return null;
 		}
 
@@ -264,11 +276,72 @@ final class ReportsEndpoint extends BaseEndpoint
 			$out['popis']['customerId'] = $customerId;
 		}
 
+		if ($currency !== null) {
+			$out['currencyIds'] = $currency['ids'];
+			$out['popis']['currency'] = $currency['code'];
+		}
+
 		return $out;
 	}
 
 	/**
-	 * @param array{merchantId?: string, customerId?: string}|null $purchaseFilter
+	 * Měna reportu. Shop s jedinou měnou se nefiltruje (null); jinak `currency` nebo výchozí měna configu.
+	 * @return array{code: string, ids: array<string>}|null
+	 */
+	private function currencyFilter(Query $query): ?array
+	{
+		$requested = $query->string('currency');
+		$codes = $this->codebooks->getUsedCurrencyCodes();
+		$this->reportCurrency = null;
+		$this->otherCurrencies = [];
+
+		// shop, který prodává v jediné měně, se nefiltruje — dotazy reportů zůstanou, jak byly
+		if ($requested === null && \count($codes) < 2) {
+			return null;
+		}
+
+		$code = Strings::upper($requested ?? $this->config->getCurrency());
+		$ids = $this->codebooks->getCurrencyIds($code);
+
+		if (!$ids) {
+			throw ApiException::badRequest("Neznámá měna $code; shop vede " . \implode(', ', $this->codebooks->getCurrencyCodes()) . '.');
+		}
+
+		$this->reportCurrency = $code;
+		$this->otherCurrencies = \array_values(\array_filter($codes, static fn (string $other): bool => Strings::upper($other) !== $code));
+
+		return ['code' => $code, 'ids' => $ids];
+	}
+
+	/** Měna, kterou se označí částky reportu. */
+	private function reportCurrencyCode(): string
+	{
+		return $this->reportCurrency ?? $this->config->getCurrency();
+	}
+
+	/**
+	 * Co odpověď řekne o měně, když report vynechal nákupy v jiných měnách — jinak by model
+	 * tržbu v CZK vydával za celou tržbu.
+	 * @return array<string, mixed>
+	 */
+	private function currencyExtra(): array
+	{
+		if ($this->reportCurrency === null) {
+			return [];
+		}
+
+		$out = ['currency' => $this->reportCurrency];
+
+		if ($this->otherCurrencies) {
+			$out['currencyNote'] = 'Částky jsou jen z nákupů v ' . $this->reportCurrency . '. Nákupy v '
+				. \implode(', ', $this->otherCurrencies) . ' se počítají zvlášť — stejný dotaz s currency=' . $this->otherCurrencies[0] . '.';
+		}
+
+		return $out;
+	}
+
+	/**
+	 * @param array{merchantId?: string, customerId?: string, currencyIds?: array<string>}|null $purchaseFilter
 	 */
 	private function wherePurchase(GenericCollection $rows, ?array $purchaseFilter, string $alias): void
 	{
@@ -282,6 +355,10 @@ final class ReportsEndpoint extends BaseEndpoint
 
 		if (isset($purchaseFilter['customerId'])) {
 			$rows->where("$alias.fk_customer = :apiCustomer", ['apiCustomer' => $purchaseFilter['customerId']]);
+		}
+
+		if (isset($purchaseFilter['currencyIds'])) {
+			$rows->where("$alias.fk_currency", $purchaseFilter['currencyIds']);
 		}
 	}
 
@@ -309,10 +386,10 @@ final class ReportsEndpoint extends BaseEndpoint
 
 		[$from, $to] = $query->window('from', 'to');
 		$suffix = $this->connection->getMutationSuffix();
-		$currency = $this->config->getCurrency();
 
 		$filter = $this->itemFilter($query, $suffix);
 		$purchaseFilter = $this->purchaseFilter($query);
+		$currency = $this->reportCurrencyCode();
 
 		$rows = $this->itemSales($from, $to, [
 			'productId' => 'ci.fk_product',
@@ -352,6 +429,7 @@ final class ReportsEndpoint extends BaseEndpoint
 			$extra['filter'] = ($extra['filter'] ?? []) + $purchaseFilter['popis'];
 		}
 
+		$extra += $this->currencyExtra();
 		$response = Response::list($items, null);
 
 		return $extra ? $response->withExtra($extra) : $response;
@@ -368,10 +446,11 @@ final class ReportsEndpoint extends BaseEndpoint
 
 		[$from, $to] = $query->window('from', 'to');
 		[$compareFrom, $compareTo] = $this->comparisonWindow($query, $from, $to);
+		$purchaseFilter = $this->purchaseFilter($query);
 
-		$current = $this->loadCustomerTotals($from, $to);
-		$previous = $this->loadCustomerTotals($compareFrom, $compareTo);
-		$currency = $this->config->getCurrency();
+		$current = $this->loadCustomerTotals($from, $to, $purchaseFilter);
+		$previous = $this->loadCustomerTotals($compareFrom, $compareTo, $purchaseFilter);
+		$currency = $this->reportCurrencyCode();
 
 		$names = $this->loadCustomerNames(\array_values(\array_unique(\array_merge(\array_keys($current), \array_keys($previous)))));
 		$items = [];
@@ -403,7 +482,15 @@ final class ReportsEndpoint extends BaseEndpoint
 			default => static fn (array $a, array $b): int => (float) $b['revenue']['amount'] <=> (float) $a['revenue']['amount'],
 		});
 
-		return Response::list(\array_slice($items, 0, $query->limit()), null);
+		$extra = $this->currencyExtra();
+
+		if ($purchaseFilter !== null) {
+			$extra['filter'] = $purchaseFilter['popis'];
+		}
+
+		$response = Response::list(\array_slice($items, 0, $query->limit()), null);
+
+		return $extra ? $response->withExtra($extra) : $response;
 	}
 
 	/**
@@ -1176,7 +1263,7 @@ final class ReportsEndpoint extends BaseEndpoint
 			return [];
 		}
 
-		$currency = $this->config->getCurrency();
+		$currency = $this->reportCurrencyCode();
 		$select = [
 			'reportKey' => self::periodKey($groupBy, 'p', $from),
 			'orders' => 'COUNT(o.uuid)',
@@ -1256,7 +1343,7 @@ final class ReportsEndpoint extends BaseEndpoint
 			return [];
 		}
 
-		$currency = $this->config->getCurrency();
+		$currency = $this->reportCurrencyCode();
 		$suffix = $this->connection->getMutationSuffix();
 
 		$rows = $this->itemSales($from, $to, [
@@ -1429,7 +1516,7 @@ final class ReportsEndpoint extends BaseEndpoint
 			return [];
 		}
 
-		$currency = $this->config->getCurrency();
+		$currency = $this->reportCurrencyCode();
 		$select = [
 			'reportKey' => self::periodKey($groupBy, 'pu', $from),
 			'orders' => 'COUNT(DISTINCT o.uuid)',
@@ -1526,9 +1613,10 @@ final class ReportsEndpoint extends BaseEndpoint
 	}
 
 	/**
+	 * @param array{merchantId?: string, customerId?: string, currencyIds?: array<string>}|null $purchaseFilter
 	 * @return array<string, object>
 	 */
-	private function loadCustomerTotals(string $from, string $to): array
+	private function loadCustomerTotals(string $from, string $to, ?array $purchaseFilter = null): array
 	{
 		$rows = $this->connection->rows(['o' => 'eshop_order'], [
 			'customerId' => 'p.fk_customer',
@@ -1541,6 +1629,8 @@ final class ReportsEndpoint extends BaseEndpoint
 			->where('o.canceledTs IS NULL')
 			->where('p.fk_customer IS NOT NULL')
 			->setGroupBy(['p.fk_customer']);
+
+		$this->wherePurchase($rows, $purchaseFilter, 'p');
 
 		$map = [];
 

@@ -138,7 +138,7 @@ final class Specification
 					$this->param('status', 'Stav objednávky: new, processing, shipped, delivered, cancelled, returned.'),
 					$this->param('customerId', 'Jen objednávky tohoto zákazníka.'),
 					$this->param('registrationNo', 'Jen objednávky s tímto IČO.'),
-					$this->param('merchantId', 'Jen objednávky tohoto obchodníka.'),
+					$this->param('merchantId', 'Jen objednávky obchodníka — podle nastavení shopu ty, které zadal, nebo objednávky jeho zákazníků (a ty, které zadal).'),
 					$this->param('since', 'Jen objednávky vytvořené od tohoto okamžiku (YYYY-MM-DD nebo ISO 8601).'),
 					$this->param('shippingDate', 'Jen objednávky s tímhle požadovaným datem expedice.'),
 					$this->param('exported', 'true/false — jestli je objednávka zaexportovaná do ERP.', 'boolean'),
@@ -154,7 +154,7 @@ final class Specification
 			'/v1/orders/{id}' => $this->operation(
 				'Detail objednávky',
 				'Jedna objednávka včetně položek.',
-				[$this->pathParam('id', 'Id objednávky.')],
+				[$this->pathParam('id', 'Id objednávky.'), $this->ownerParam('objednávka')],
 				'Order',
 			),
 			'/v1/invoices' => $this->operation(
@@ -168,6 +168,7 @@ final class Specification
 					$this->param('withoutOrder', 'true = jen faktury bez navázané objednávky.', 'boolean'),
 					$this->param('customerId', 'Jen faktury tohoto zákazníka.'),
 					$this->param('registrationNo', 'Jen faktury s tímto IČO.'),
+					$this->param('merchantId', 'Jen faktury zákazníků tohoto obchodníka.'),
 					$this->ref('Q'),
 					$this->ref('Limit'),
 					$this->ref('Cursor'),
@@ -177,7 +178,7 @@ final class Specification
 			'/v1/invoices/{id}' => $this->operation(
 				'Detail faktury',
 				'Jedna faktura včetně položek.',
-				[$this->pathParam('id', 'Id faktury.')],
+				[$this->pathParam('id', 'Id faktury.'), $this->ownerParam('faktura')],
 				'Invoice',
 			),
 			'/v1/products' => $this->operation(
@@ -238,6 +239,7 @@ final class Specification
 					$this->param('product', 'Jen jeden produkt — id nebo kód (i s podkódem; holý kód zahrne jeho podkódy). Neznámý je 400.'),
 					$this->param('merchantId', 'Jen nákupy zákazníků tohoto obchodníka (sloupec i vazební tabulka M:N) — ne kdo objednávku zadal.'),
 					$this->param('customerId', 'Jen nákupy jednoho zákazníka; neznámý je 404.'),
+					$this->param('currency', 'Měna reportu (CZK, EUR…). Shop, který prodává ve víc měnách, počítá report jen z nákupů v jedné měně — bez parametru ve výchozí; odpověď pak nese currency a currencyNote.'),
 					$this->param('compare', 'Srovnávací období: lastYear (totéž okno o rok dřív) nebo previous (stejně dlouhé bezprostředně předchozí). Řádky dostanou compare, change a changePercent.'),
 					$this->param('compareFrom', 'Vlastní srovnávací období — začátek (YYYY-MM-DD), jen spolu s compareTo a bez compare.'),
 					$this->param('compareTo', 'Vlastní srovnávací období — konec (YYYY-MM-DD).'),
@@ -330,7 +332,7 @@ final class Specification
 				'Proč je faktura v tomhle stavu',
 				'Diagnostika úhrady: datum úhrady, uhrazená částka, storno, platby navázaných objednávek a upomínky — '
 					. 'a která z těch hodnot rozhodla o stavu.',
-				[$this->pathParam('id', 'Id faktury.')],
+				[$this->pathParam('id', 'Id faktury.'), $this->ownerParam('faktura')],
 				'Diagnostics',
 			),
 			'/v1/reports/customers' => $this->operation(
@@ -342,6 +344,8 @@ final class Specification
 					$this->param('compareFrom', 'Začátek srovnávacího období.'),
 					$this->param('compareTo', 'Konec srovnávacího období.'),
 					$this->param('sort', 'revenue (výchozí), growth, drop.'),
+					$this->param('merchantId', 'Jen zákazníci tohoto obchodníka.'),
+					$this->param('currency', 'Měna reportu (CZK, EUR…). Shop, který prodává ve víc měnách, počítá report jen z nákupů v jedné měně — bez parametru ve výchozí; odpověď pak nese currency a currencyNote.'),
 					$this->ref('Limit'),
 				],
 				'CustomerReportList',
@@ -406,13 +410,13 @@ final class Specification
 				'Historie objednávky',
 				'Kdo objednávku kdy změnil a na co — z logu, který si shop vede sám. Na otázky „proč je pozastavená" '
 					. 'nebo „kdo změnil dopravu".',
-				[$this->pathParam('id', 'Id objednávky.'), $this->ref('Limit')],
+				[$this->pathParam('id', 'Id objednávky.'), $this->ownerParam('objednávka'), $this->ref('Limit')],
 				'OrderHistoryList',
 			),
 			'/v1/orders/{id}/shipments' => $this->operation(
 				'Zásilky objednávky',
 				'Dopravy, balíky a sledovací kódy — kde zásilka je a co v ní bylo.',
-				[$this->pathParam('id', 'Id objednávky.')],
+				[$this->pathParam('id', 'Id objednávky.'), $this->ownerParam('objednávka')],
 				'ShipmentList',
 			),
 			'/v1/products/{id}/reviews' => $this->operation(
@@ -483,6 +487,7 @@ final class Specification
 					$this->param('producer', 'Jen produkty od výrobce — id nebo název. Neznámý je 400.'),
 					$this->param('merchantId', 'Jen nákupy zákazníků tohoto obchodníka (sloupec i vazební tabulka M:N).'),
 					$this->param('customerId', 'Jen nákupy jednoho zákazníka; neznámý je 404.'),
+					$this->param('currency', 'Měna reportu (CZK, EUR…). Shop, který prodává ve víc měnách, počítá report jen z nákupů v jedné měně — bez parametru ve výchozí; odpověď pak nese currency a currencyNote.'),
 					$this->ref('Limit'),
 				],
 				'TopProductList',
@@ -549,12 +554,12 @@ final class Specification
 	}
 
 	/**
-	 * `merchantId` u cest zákazníka podle id: ověření vlastnictví, ne filtr.
+	 * `merchantId` u cest podle id: ověření vlastnictví, ne filtr.
 	 * @return array<string, mixed>
 	 */
-	private function ownerParam(): array
+	private function ownerParam(string $subject = 'zákazník'): array
 	{
-		return $this->param('merchantId', 'Ověření vlastnictví: zákazník, který tomuhle obchodníkovi nepatří (sloupec ani vazební tabulka), je 404.');
+		return $this->param('merchantId', "Ověření vlastnictví: když $subject tomuhle obchodníkovi nepatří, vrátí se 404.");
 	}
 
 	private function param(string $name, string $description, string $type = 'string'): array

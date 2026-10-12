@@ -73,6 +73,9 @@ Dvě věci, na které se naráží na klasickém serveru:
 | `orderStates` | viz níž | mapa normalizovaný stav → stavy shopu |
 | `invoicePaymentTracked` | `true` | eviduje shop úhrady faktur? kde je vede ERP, dej `false` |
 | `vatCountry` | `CZ` | země, jejíž sazbu DPH produktu API bere (eshop 2.2 je vede po zemích; starší volbu ignorují) |
+| `merchantScope.orders` | `placed` | objednávky obchodníka: `placed` = které zadal, `customers` = jeho zákazníků (a které zadal) |
+| `merchantScope.subordinates` | `false` | obchodník vidí i zákazníky přímých podřízených (`eshop_merchant_nxn_subordinate`) |
+| `merchantScope.customerGroups` | `false` | k zákazníkům obchodníka patří i ti z jeho skupin zákazníků |
 | `customerPrices` | `false` | vydávat ceny konkrétního zákazníka (vědomá výjimka, viz níž) |
 | `defaultLimit` | `200` | kolik záznamů vrátí seznam nebo report bez `limit` |
 | `maxLimit` | `1000` | strop parametru `limit` |
@@ -81,6 +84,16 @@ Dvě věci, na které se naráží na klasickém serveru:
 | `userfilesUrl` | `null` | veřejná adresa složky s obrázky; `null` = adresa shopu + `/userfiles` |
 | `productUrlMask` | `null` | odkaz na produkt, když ho shop nemá ve stránkách: `produkt/{id}` (`{id}`, `{code}`) |
 | `extensions` | `[]` | služby implementující `DoryoApi\Extension\DoryoApiExtension` |
+
+**Obchodník (`merchantId`).** Kolego dosazuje obchodníkovi s rolí „vidí jen svoje" parametr
+`merchantId`. U seznamů (zákazníci, objednávky, faktury, reporty) je to filtr, u cest podle id
+(`/v1/customers/{id}/…`, `/v1/orders/{id}[/history|/shipments]`, `/v1/invoices/{id}[/payment]`,
+i `by-number`) ověření vlastnictví — cizí záznam je 404. Komu co patří, řídí `merchantScope`;
+Forbaby ho má nastavený jako admin (`orders: customers`, podřízení i skupiny).
+
+**Měny v reportech.** Shop, který prodává ve víc měnách, počítá tržby, top produkty a růst
+zákazníků jen z nákupů v jedné měně — `currency`, jinak výchozí `currency` z configu — a odpověď
+nese `currency` a `currencyNote` s tím, co vynechal. Shop s jedinou měnou se nefiltruje.
 
 Výchozí mapa stavů je `new: [open]`, `processing: [received]`, `delivered: [finished]`,
 `cancelled: [canceled]`. Stavy `shipped` a `returned` eshop nerozlišuje; shop, který si je vede

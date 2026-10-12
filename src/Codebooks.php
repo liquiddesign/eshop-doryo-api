@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace DoryoApi;
 
+use Nette\Utils\Strings;
 use StORM\DIConnection;
 
 /**
@@ -17,6 +18,9 @@ final class Codebooks
 
 	/** @var array<string, float>|null */
 	private ?array $vatRates = null;
+
+	/** @var array<string>|null */
+	private ?array $usedCurrencyCodes = null;
 
 	/** @var array<string, string>|null klíč sazby DPH per produkt (eshop 2.2), načtený líně */
 	private ?array $productVatRates = null;
@@ -102,6 +106,58 @@ final class Codebooks
 		}
 
 		return isset($this->tableColumns[$table][$column]);
+	}
+
+	public function getConfig(): Config
+	{
+		return $this->config;
+	}
+
+	/**
+	 * Id měn s tímhle kódem (eshop má měnu jako entitu; uuid se s kódem shodovat nemusí).
+	 * @return array<string>
+	 */
+	public function getCurrencyIds(string $code): array
+	{
+		$this->currencies ??= $this->connection->findRepository(\Eshop\DB\Currency::class)->many()->toArrayOf('code');
+
+		return \array_map('strval', \array_keys(\array_filter(
+			$this->currencies,
+			static fn ($candidate): bool => Strings::lower((string) $candidate) === Strings::lower($code),
+		)));
+	}
+
+	/**
+	 * Kódy všech měn shopu.
+	 * @return array<string>
+	 */
+	public function getCurrencyCodes(): array
+	{
+		$this->currencies ??= $this->connection->findRepository(\Eshop\DB\Currency::class)->many()->toArrayOf('code');
+
+		return \array_values(\array_unique(\array_map('strval', $this->currencies)));
+	}
+
+	/**
+	 * Kódy měn, ve kterých shop opravdu prodává (nákupy). Index na fk_currency to zvládne bez
+	 * průchodu tabulkou; drží se po dobu requestu.
+	 * @return array<string>
+	 */
+	public function getUsedCurrencyCodes(): array
+	{
+		if ($this->usedCurrencyCodes !== null) {
+			return $this->usedCurrencyCodes;
+		}
+
+		$codes = [];
+
+		foreach ($this->connection->rows(['cp' => 'eshop_purchase'], ['currency' => 'cp.fk_currency'])->setGroupBy(['cp.fk_currency']) as $row) {
+			if ($row->currency !== null) {
+				$codes[] = $this->getCurrencyCode((string) $row->currency);
+			}
+		}
+
+		return $this->usedCurrencyCodes = \array_values(\array_unique($codes));
 	}
 
 	public function getCurrencyCode(?string $uuid): string
