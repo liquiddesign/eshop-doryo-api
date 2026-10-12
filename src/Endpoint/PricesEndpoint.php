@@ -252,7 +252,7 @@ final class PricesEndpoint extends BaseEndpoint
 			}
 
 			$currency = $this->codebooks->getCurrencyCode($price->currency);
-			$vatRate = $this->codebooks->getVatRate($product->vatRate);
+			$vatRate = $this->codebooks->getProductVatRate($product);
 
 			$items[] = [
 				'productId' => $id,

@@ -941,7 +941,7 @@ final class Specification
 					'id' => ['type' => 'string'],
 					'code' => ['type' => 'string', 'nullable' => true],
 					'name' => ['type' => 'string'],
-					'importActive' => ['type' => 'boolean'],
+					'importActive' => ['type' => 'boolean', 'nullable' => true],
 					'lastImportAt' => ['type' => 'string', 'nullable' => true],
 					'products' => ['type' => 'integer'],
 				],

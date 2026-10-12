@@ -13,6 +13,11 @@ a `eshop_price.hidden`, které jsou až od eshopu 2.1; shop na 2.0 produkty měk
 neskrývá, takže tam ty podmínky nedávají smysl. Běží to i na StORM 1.1 — balík z něj používá
 jen API, které je v 1.1 i 2.0 shodné.
 
+Eshop 2.2 (ověřeno na Forbaby) se liší ještě jinde a balík s tím počítá: sazbu DPH produktu vede
+po zemích (`eshop_productvatrate`, země z `vatCountry`), u položky košíku nemá čas vložení,
+dodavatel nemá `isImportActive` a vazba zákazník–obchodník může být jen v tabulce M:N, bez
+sloupce `eshop_customer.fk_merchant`.
+
 **Jen ke čtení.** Žádný endpoint balíku nemění data; jiná metoda než GET/HEAD vrací `405`.
 Zápis si může přidat projekt vlastním endpointem, viz [Vlastní endpointy z projektu](#vlastní-endpointy-z-projektu).
 
@@ -67,6 +72,7 @@ Dvě věci, na které se naráží na klasickém serveru:
 | `defaultCustomerGroup` | `null` | skupina, ze které se ceníky vezmou; `null` = výchozí po registraci |
 | `orderStates` | viz níž | mapa normalizovaný stav → stavy shopu |
 | `invoicePaymentTracked` | `true` | eviduje shop úhrady faktur? kde je vede ERP, dej `false` |
+| `vatCountry` | `CZ` | země, jejíž sazbu DPH produktu API bere (eshop 2.2 je vede po zemích; starší volbu ignorují) |
 | `customerPrices` | `false` | vydávat ceny konkrétního zákazníka (vědomá výjimka, viz níž) |
 | `defaultLimit` | `200` | kolik záznamů vrátí seznam nebo report bez `limit` |
 | `maxLimit` | `1000` | strop parametru `limit` |

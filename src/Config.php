@@ -18,7 +18,7 @@ final class Config
 	 * Verze balíku, když se nedá zjistit z Composeru (balík nasazený mimo composer install).
 	 * Skutečná verze se bere z tagu přes {@see version()}, aby s vydáním nedriftovala.
 	 */
-	public const VERSION = '1.10.1';
+	public const VERSION = '1.11.0';
 
 	/** Normalizované stavy objednávek, které API vrací v poli `status`. */
 	public const ORDER_STATUSES = ['new', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
@@ -44,6 +44,7 @@ final class Config
 	 * @param int $maxLimit Strop parametru `limit`
 	 * @param int $defaultWindowMonths Výchozí okno seznamů a reportů bez data; velký shop si ho zkrátí
 	 * @param int $maxWindowMonths Nejdelší okno, které API přijme
+	 * @param string $vatCountry Země, jejíž sazbu DPH produktu API bere (eshop 2.2 je vede po zemích)
 	 */
 	public function __construct(
 		private string $prefix = 'doryo-api',
@@ -72,7 +73,13 @@ final class Config
 		private int $maxLimit = 1000,
 		private int $defaultWindowMonths = 6,
 		private int $maxWindowMonths = 24,
+		private string $vatCountry = 'CZ',
 	) {
+	}
+
+	public function getVatCountry(): string
+	{
+		return $this->vatCountry;
 	}
 
 	public function getPrefix(): string

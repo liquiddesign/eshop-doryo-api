@@ -18,6 +18,9 @@ final class Codebooks
 	/** @var array<string, float>|null */
 	private ?array $vatRates = null;
 
+	/** @var array<string, string>|null klíč sazby DPH per produkt (eshop 2.2), načtený líně */
+	private ?array $productVatRates = null;
+
 	/** @var array<string, string>|null */
 	private ?array $pricelistNames = null;
 
@@ -145,6 +148,37 @@ final class Codebooks
 		);
 
 		return $this->vatRates[$key] ?? null;
+	}
+
+	/**
+	 * Sazba DPH produktu v procentech. Eshop do 2.1 ji má na produktu (`vatRate` = klíč sazby),
+	 * eshop 2.2 po zemích v `eshop_productvatrate` — tam se bere země z configu (`vatCountry`).
+	 * Vazba se načte celá jedním dotazem: mapper jde po produktech a dotaz na každý by byl N+1.
+	 */
+	public function getProductVatRate(\Eshop\DB\Product $product): ?float
+	{
+		if ($this->hasColumn('eshop_product', 'vatRate')) {
+			$key = $product->getValue('vatRate');
+
+			return $this->getVatRate($key !== null ? (string) $key : null);
+		}
+
+		if (!$this->hasColumn('eshop_productvatrate', 'fk_product')) {
+			return null;
+		}
+
+		if ($this->productVatRates === null) {
+			$this->productVatRates = [];
+
+			$rows = $this->connection->rows(['pv' => 'eshop_productvatrate'], ['product' => 'pv.fk_product', 'rate' => 'pv.fk_vatRate'])
+				->where('pv.fk_country', $this->config->getVatCountry());
+
+			foreach ($rows as $row) {
+				$this->productVatRates[(string) $row->product] = (string) $row->rate;
+			}
+		}
+
+		return $this->getVatRate($this->productVatRates[(string) $product->getPK()] ?? null);
 	}
 
 	public function getPricelistName(?string $uuid): ?string
