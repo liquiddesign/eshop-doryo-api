@@ -32,7 +32,7 @@ final class ProductMapper extends Mapper
 	public function map(Product $product, array $extras = []): array
 	{
 		$currency = $extras['currency'] ?? $this->config->getCurrency();
-		$vatRate = $this->codebooks->getVatRate($product->vatRate);
+		$vatRate = $this->codebooks->getProductVatRate($product);
 		$price = $extras['price'] ?? null;
 		$priceVat = $extras['priceVat'] ?? ($price !== null && $vatRate !== null ? \round($price * (1 + $vatRate / 100), 2) : null);
 

@@ -245,7 +245,8 @@ final class MetaEndpoint extends BaseEndpoint
 			'id' => 's.uuid',
 			'code' => 's.code',
 			'name' => 's.name',
-			'importActive' => 's.isImportActive',
+			// eshop 2.2 sloupec nemá
+			'importActive' => $this->codebooks->hasColumn('eshop_supplier', 'isImportActive') ? 's.isImportActive' : 'NULL',
 			'lastImportTs' => 's.lastImportTs',
 			'lastUpdateTs' => 's.lastUpdateTs',
 			'codePrefix' => 's.productCodePrefix',
@@ -260,7 +261,7 @@ final class MetaEndpoint extends BaseEndpoint
 				'id' => $row->id,
 				'code' => $row->code,
 				'name' => $row->name,
-				'importActive' => (bool) $row->importActive,
+				'importActive' => $row->importActive !== null ? (bool) $row->importActive : null,
 				'lastImportAt' => Dates::dateTime($row->lastImportTs, $this->config->getTimezone()),
 				'lastUpdateAt' => Dates::dateTime($row->lastUpdateTs, $this->config->getTimezone()),
 				'products' => (int) $row->products,

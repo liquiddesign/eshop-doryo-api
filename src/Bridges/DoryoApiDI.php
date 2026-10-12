@@ -68,6 +68,9 @@ final class DoryoApiDI extends CompilerExtension
 				'cancelled' => ['canceled'],
 			])->mergeDefaults(false),
 			'invoicePaymentTracked' => Expect::bool(true),
+			// eshop 2.2 vede sazbu DPH produktu po zemích (eshop_productvatrate) — API bere sazbu této
+			// země; starší eshopy mají sazbu přímo na produktu a volbu ignorují
+			'vatCountry' => Expect::string('CZ'),
 			// ceny konkrétního zákazníka jsou vědomá výjimka — ve výchozím stavu vypnuté
 			'customerPrices' => Expect::bool(false),
 			'userfilesDir' => Expect::string()->nullable(),
@@ -112,6 +115,7 @@ final class DoryoApiDI extends CompilerExtension
 				'defaultCustomerGroup' => $config->defaultCustomerGroup,
 				'orderStates' => $config->orderStates,
 				'invoicePaymentTracked' => $config->invoicePaymentTracked,
+				'vatCountry' => $config->vatCountry,
 				'customerPricesEnabled' => $config->customerPrices,
 				'userfilesDir' => $config->userfilesDir ?? $builder->parameters['wwwDir'] . '/userfiles',
 				'imageSizes' => $config->imageSizes,

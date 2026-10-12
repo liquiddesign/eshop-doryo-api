@@ -428,7 +428,8 @@ final class OrdersEndpoint extends BaseEndpoint
 		$items = $this->repository(CartItem::class)->many()
 			->join(['cart' => 'eshop_cart'], 'cart.uuid = this.fk_cart', [], 'INNER')
 			->where('cart.fk_purchase', $purchase->getPK())
-			->orderBy(['this.createdTs' => 'ASC']);
+			// eshop 2.2 nemá u položky košíku čas vložení; uuid je aspoň stabilní pořadí
+			->orderBy([$this->codebooks->hasColumn('eshop_cartitem', 'createdTs') ? 'this.createdTs' : 'this.uuid' => 'ASC']);
 
 		$mapped = [];
 
