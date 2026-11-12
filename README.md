@@ -105,7 +105,8 @@ po svém, si mapu přepíše.
 Kořen `/{prefix}` vrací rozcestník (odkaz na `openapi.json`, health a capabilities) — kdo si
 adresu otevře v prohlížeči, dostane odpověď API, ne stránkovou 404 shopu.
 
-Zbytek je na `/{prefix}/v1/…`, seznamy v obálce `{ items, nextCursor, hasMore }`, částky jako
+Zbytek je na `/{prefix}/v1/…`, seznamy v obálce `{ items, nextCursor, hasMore }` (zákazníci a produkty na první stránce i `total` — počet
+všech po filtrech), částky jako
 **řetězec** s měnou (`{"amount": "12500.00", "currency": "CZK"}`), chyby v `application/problem+json`
 česky. `/{prefix}/openapi.json` popisuje endpointy pro introspekci.
 

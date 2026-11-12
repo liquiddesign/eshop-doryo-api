@@ -92,7 +92,8 @@ final class Specification
 			),
 			'/v1/customers' => $this->operation(
 				'Seznam zákazníků',
-				'Zákazníci e-shopu i s obratem a počtem objednávek. Hledá se podle jména, firmy, e-mailu a IČO.',
+				'Zákazníci e-shopu i s obratem a počtem objednávek. Hledá se podle jména, firmy, e-mailu a IČO. '
+					. 'První stránka nese total — počet všech zákazníků po filtrech.',
 				[
 					$this->ref('Q'),
 					$this->param('registrationNo', 'IČO zákazníka (přesná shoda).'),
@@ -185,7 +186,8 @@ final class Specification
 			),
 			'/v1/products' => $this->operation(
 				'Seznam produktů',
-				'Produkty s cenou z veřejného ceníku a se skladovou dostupností.',
+				'Produkty s cenou z veřejného ceníku a se skladovou dostupností. První stránka nese total — počet všech '
+					. 'produktů po filtrech (s category kolik jich kategorie má).',
 				[
 					$this->ref('Q'),
 					$this->param('code', 'Kód produktu (přesná shoda); podkód se bere s vodicí nulou i bez ní, tedy 37214.01 i 37214.1.'),
@@ -1103,6 +1105,11 @@ final class Specification
 				'items' => ['type' => 'array', 'items' => ['$ref' => "#/components/schemas/$item"]],
 				'nextCursor' => ['type' => 'string', 'nullable' => true, 'description' => 'Kurzor další stránky, nebo null.'],
 				'hasMore' => ['type' => 'boolean'],
+				'total' => [
+					'type' => 'integer',
+					'description' => 'Počet všech záznamů po filtrech. Jen u seznamu zákazníků a produktů a jen na první '
+						. 'stránce (bez cursor) — na „kolik jich je" stačí limit=1 a tohle číslo, stránkovat netřeba.',
+				],
 				'window' => [
 					'type' => 'object',
 					'description' => 'Jen když se časové okno vzalo z výchozí hodnoty. Říká, jaký rozsah se '
