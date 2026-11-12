@@ -18,7 +18,7 @@ final class Config
 	 * Verze balíku, když se nedá zjistit z Composeru (balík nasazený mimo composer install).
 	 * Skutečná verze se bere z tagu přes {@see version()}, aby s vydáním nedriftovala.
 	 */
-	public const VERSION = '1.12.0';
+	public const VERSION = '1.13.0';
 
 	/** Normalizované stavy objednávek, které API vrací v poli `status`. */
 	public const ORDER_STATUSES = ['new', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
@@ -48,6 +48,8 @@ final class Config
 	 * @param string $merchantOrders Objednávky obchodníka: `placed` (které zadal) nebo `customers` (jeho zákazníků)
 	 * @param bool $merchantSubordinates Obchodník vidí i zákazníky svých přímých podřízených
 	 * @param bool $merchantCustomerGroups K zákazníkům obchodníka patří i ti z jeho skupin zákazníků
+	 * @param array<string> $serviceProductCodes Kódy položek faktur, které nejsou zboží (balné, dodatečná sleva…) —
+	 *     report nejprodávanějších produktů z faktur je vynechá; řádek bez produktu je služba vždy
 	 */
 	public function __construct(
 		private string $prefix = 'doryo-api',
@@ -80,6 +82,7 @@ final class Config
 		private string $merchantOrders = 'placed',
 		private bool $merchantSubordinates = false,
 		private bool $merchantCustomerGroups = false,
+		private array $serviceProductCodes = [],
 	) {
 	}
 
@@ -99,6 +102,15 @@ final class Config
 	public function merchantIncludesCustomerGroups(): bool
 	{
 		return $this->merchantCustomerGroups;
+	}
+
+	/**
+	 * Kódy položek faktur, které nejsou zboží (balné, dodatečná sleva…).
+	 * @return array<string>
+	 */
+	public function getServiceProductCodes(): array
+	{
+		return $this->serviceProductCodes;
 	}
 
 	public function getVatCountry(): string

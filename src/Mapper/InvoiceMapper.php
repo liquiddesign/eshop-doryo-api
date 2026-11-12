@@ -40,7 +40,9 @@ final class InvoiceMapper extends Mapper
 			'number' => $invoice->code,
 			'type' => 'issued',
 			'status' => $this->status($invoice, $outstanding),
-			'customerId' => $extras['customerId'] ?? $this->relationId($invoice, 'customer'),
+			'customerId' => $customerId = $extras['customerId'] ?? $this->relationId($invoice, 'customer'),
+			// interní doklad (firma sama sobě) zákazníka nemá — do obratů nepatří
+			'internal' => $customerId === null,
 			'orderIds' => \array_values($extras['orderIds'] ?? []),
 			'issuedOn' => Dates::date($invoice->exposed),
 			'dueOn' => Dates::date($invoice->dueDate),

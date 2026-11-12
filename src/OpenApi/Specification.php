@@ -169,6 +169,8 @@ final class Specification
 					$this->param('customerId', 'Jen faktury tohoto zákazníka.'),
 					$this->param('registrationNo', 'Jen faktury s tímto IČO.'),
 					$this->param('merchantId', 'Jen faktury zákazníků tohoto obchodníka.'),
+					$this->param('product', 'Jen faktury s tímto produktem v položkách — id nebo kód (i s podkódem). „Komu jsme fakturovali X." '
+						. 'Na součty kusů a obratu po produktech je report /v1/reports/top-products?source=invoices.'),
 					$this->ref('Q'),
 					$this->ref('Limit'),
 					$this->ref('Cursor'),
@@ -480,9 +482,20 @@ final class Specification
 			'/v1/reports/top-products' => $this->operation(
 				'Nejprodávanější produkty',
 				'Produkty seřazené podle tržby za období. S category nebo producer jen z té kategorie (i podkategorií) '
-					. 'nebo od toho výrobce; s merchantId jen z nákupů zákazníků obchodníka, s customerId jen jednoho zákazníka.',
+					. 'nebo od toho výrobce; s merchantId jen z nákupů zákazníků obchodníka, s customerId jen jednoho zákazníka. '
+					. 'Výchozí zdroj jsou objednávky (revenue s DPH). source=invoices počítá z FAKTUR jedním dotazem: podle data vystavení, '
+					. 'bez stornovaných, dobropisy se odečítají od kusů i obratu, služební řádky (balné, dodatečná sleva — kódy z konfigurace, '
+					. 'nebo řádek bez produktu) a interní faktury bez zákazníka se vynechají; řadí podle obratu bez DPH a položka nese '
+					. 'revenueWithoutVat, revenueWithVat a invoiceCount. Odpověď pak nese invoices (počet faktur, dobropisů, součet bez DPH '
+					. 'a jeho rozpad na zboží a služby) a duplicates (stejné číslo dvakrát, dvě faktury k jedné objednávce). '
+					. 'Na otázky „co jsme vyfakturovali" a srovnání s fakturací ber invoices, na „co se objednává" výchozí orders.',
 				[
 					...$this->windowParams(),
+					$this->param('source', 'Odkud report počítá: orders (výchozí, z objednávek) nebo invoices (z faktur).'),
+					$this->param('assignment', 'Jen se source=invoices a merchantId: scope (výchozí, zákazníci obchodníka jako ve zbytku API) '
+						. 'nebo direct (jen přímo přiřazení zákazníci — stejně jako plnění kvartálního plánu).'),
+					$this->param('excludeServiceLines', 'Jen se source=invoices: false = počítat i služební řádky s produktem (výchozí true).', 'boolean'),
+					$this->param('includeInternal', 'Jen se source=invoices: true = počítat i interní faktury bez zákazníka (výchozí false).', 'boolean'),
 					$this->param('category', 'Jen produkty z kategorie — id, kód nebo název; zahrne i podkategorie. Neznámá je 400.'),
 					$this->param('producer', 'Jen produkty od výrobce — id nebo název. Neznámý je 400.'),
 					$this->param('merchantId', 'Jen nákupy zákazníků tohoto obchodníka (sloupec i vazební tabulka M:N).'),
@@ -736,6 +749,7 @@ final class Specification
 					'type' => ['type' => 'string'],
 					'status' => ['type' => 'string', 'enum' => ['paid', 'sent', 'overdue', 'cancelled']],
 					'customerId' => ['type' => 'string', 'nullable' => true],
+					'internal' => ['type' => 'boolean', 'description' => 'Interní doklad bez zákazníka (firma sama sobě) — do obratů nepatří.'],
 					'orderIds' => ['type' => 'array', 'items' => ['type' => 'string']],
 					'issuedOn' => ['type' => 'string', 'nullable' => true],
 					'dueOn' => ['type' => 'string', 'nullable' => true],
@@ -802,8 +816,20 @@ final class Specification
 					'productId' => ['type' => 'string', 'nullable' => true],
 					'code' => ['type' => 'string', 'nullable' => true],
 					'name' => ['type' => 'string', 'nullable' => true],
-					'quantity' => ['type' => 'integer'],
-					'revenue' => ['$ref' => '#/components/schemas/Money'],
+					'quantity' => ['type' => 'integer', 'description' => 'U source=invoices po odečtení dobropisů.'],
+					'revenue' => ['$ref' => '#/components/schemas/Money', 'description' => 'Jen source=orders: tržba s DPH.'],
+					'revenueWithoutVat' => ['$ref' => '#/components/schemas/Money', 'description' => 'Jen source=invoices.'],
+					'revenueWithVat' => ['$ref' => '#/components/schemas/Money', 'description' => 'Jen source=invoices.'],
+					'invoiceCount' => ['type' => 'integer', 'description' => 'Jen source=invoices: na kolika fakturách produkt je.'],
+				],
+				'example' => [
+					'productId' => '6f3c…',
+					'code' => 'NXONDD',
+					'name' => 'Nexus kočárek Onyx',
+					'quantity' => 3,
+					'revenueWithoutVat' => ['amount' => '21051.00', 'currency' => 'CZK'],
+					'revenueWithVat' => ['amount' => '25471.71', 'currency' => 'CZK'],
+					'invoiceCount' => 3,
 				],
 			],
 			'Codebooks' => ['type' => 'object', 'description' => 'Slovníky shopu; klíče odpovídají doménám.'],
