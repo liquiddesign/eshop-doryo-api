@@ -288,6 +288,34 @@ if (!empty($product['code'])) {
 [$status] = request("$baseUrl/v1/reports/sales?groupBy=month$reportWindow&product=nesmysl-neexistuje", $token);
 check('neznámý produkt v reportu tržeb je 400', $status === 400, "dostal jsem $status");
 
+// Nejprodávanější z faktur (source=invoices): tvar položky, souhrn faktur, pravidla parametrů
+[$status, $topInv] = request("$baseUrl/v1/reports/top-products?source=invoices&limit=5$reportWindow", $token);
+$invRow = $topInv['items'][0] ?? null;
+check('top produkty z faktur odpovídají', $status === 200 && ($topInv['source'] ?? null) === 'invoices' && \is_int($topInv['invoices']['count'] ?? null), "status $status");
+check('položka z faktur má obrat bez DPH, s DPH a počet faktur', $invRow === null
+	|| (isset($invRow['revenueWithoutVat']['amount'], $invRow['revenueWithVat']['amount']) && \is_int($invRow['invoiceCount'] ?? null) && !\array_key_exists('revenue', $invRow)));
+$poradi = \array_map(static fn (array $r): float => (float) $r['revenueWithoutVat']['amount'], $topInv['items'] ?? []);
+$serazene = $poradi;
+\rsort($serazene);
+check('top produkty z faktur jsou seřazené podle obratu bez DPH', $poradi === $serazene);
+check('souhrn faktur se rozpadá na zboží a služby', isset($topInv['invoices']['totalWithoutVat']['amount'], $topInv['invoices']['productLinesWithoutVat']['amount'], $topInv['invoices']['serviceLinesWithoutVat']['amount']));
+[$status] = request("$baseUrl/v1/reports/top-products?source=nesmysl$reportWindow", $token);
+check('neznámý zdroj top produktů je 400', $status === 400, "dostal jsem $status");
+[$status] = request("$baseUrl/v1/reports/top-products?includeInternal=true$reportWindow", $token);
+check('parametr jen pro faktury u objednávek je 400', $status === 400, "dostal jsem $status");
+[$status] = request("$baseUrl/v1/reports/top-products?source=invoices&assignment=direct$reportWindow", $token);
+check('assignment=direct bez obchodníka je 400', $status === 400, "dostal jsem $status");
+[$status, $topInvMer] = request("$baseUrl/v1/reports/top-products?source=invoices&merchantId=nesmysl-neexistuje$reportWindow", $token);
+check('top produkty z faktur s neznámým obchodníkem jsou prázdné', $status === 200 && ($topInvMer['items'] ?? null) === [] && ($topInvMer['invoices']['count'] ?? null) === 0, "status $status");
+
+if ($invRow !== null && !empty($invRow['code'])) {
+	[$status, $invProd] = request("$baseUrl/v1/invoices?limit=5" . \str_replace(['&from=', '&to='], ['&issuedFrom=', '&issuedTo='], $reportWindow) . '&product=' . \rawurlencode((string) $invRow['code']), $token);
+	check('faktury s produktem z žebříčku', $status === 200 && \count($invProd['items'] ?? []) > 0, "status $status");
+}
+
+[$status] = request("$baseUrl/v1/invoices?product=nesmysl-neexistuje", $token);
+check('faktury s neznámým produktem jsou 400', $status === 400, "dostal jsem $status");
+
 echo "\nzákazník a jeho doklady\n";
 $customerId = null;
 

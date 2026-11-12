@@ -12,6 +12,7 @@ use DoryoApi\Http\Response;
 use DoryoApi\Mapper\InvoiceMapper;
 use DoryoApi\Mapper\ItemMapper;
 use DoryoApi\Support\Merchants;
+use DoryoApi\Support\ProductFilter;
 use Eshop\DB\Address;
 use Eshop\DB\Invoice;
 use Eshop\DB\InvoiceItem;
@@ -120,6 +121,17 @@ final class InvoicesEndpoint extends BaseEndpoint
 		// faktura patří obchodníkovi přes zákazníka — kdo ji vystavil, eshop nevede
 		if ($merchantId = $query->string('merchantId')) {
 			$collection->where(Merchants::customerCondition($this->codebooks, 'this.fk_customer'), ['apiMerchant' => $merchantId]);
+		}
+
+		// „komu jsme fakturovali X" — produkt podle id nebo kódu, jako filtr produktu v reportech
+		if ($product = $query->string('product')) {
+			$f = ProductFilter::product($this->connection, $this->codebooks, $product, $this->connection->getMutationSuffix(), 'fii.fk_product');
+
+			if ($f === null) {
+				throw ApiException::badRequest("Produkt $product neexistuje — hledá se podle id nebo kódu (i s podkódem).");
+			}
+
+			$collection->where('this.uuid IN (SELECT fii.fk_invoice FROM eshop_invoiceitem fii WHERE ' . $f['sql'] . ')', $f['values']);
 		}
 
 		if ($query->bool('withoutOrder', false)) {

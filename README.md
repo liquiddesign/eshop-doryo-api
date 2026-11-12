@@ -76,6 +76,7 @@ Dvě věci, na které se naráží na klasickém serveru:
 | `merchantScope.orders` | `placed` | objednávky obchodníka: `placed` = které zadal, `customers` = jeho zákazníků (a které zadal) |
 | `merchantScope.subordinates` | `false` | obchodník vidí i zákazníky přímých podřízených (`eshop_merchant_nxn_subordinate`) |
 | `merchantScope.customerGroups` | `false` | k zákazníkům obchodníka patří i ti z jeho skupin zákazníků |
+| `serviceProductCodes` | `[]` | kódy položek faktur, které nejsou zboží (balné, dodatečná sleva) — `top-products?source=invoices` je vynechá; řádek bez produktu je služba vždy |
 | `customerPrices` | `false` | vydávat ceny konkrétního zákazníka (vědomá výjimka, viz níž) |
 | `defaultLimit` | `200` | kolik záznamů vrátí seznam nebo report bez `limit` |
 | `maxLimit` | `1000` | strop parametru `limit` |
@@ -242,6 +243,19 @@ holý kód zahrne podkódy), srovnání `compare=lastYear|previous` nebo `compar
 párují o rok posunutým klíčem, u `previous` podle pořadí) a `groupBy=newVsReturning` (nový =
 první objednávka zákazníka padá do období; řádky nesou `customers`). Srovnání je druhý stejný
 dotaz, „noví vs. stálí" jeden průchod objednávkami navíc — na velkém shopu zadej období.
+
+Od 1.13.0 počítá `top-products?source=invoices` nejprodávanější produkty z **faktur** jedním dotazem
+nad `eshop_invoiceitem` (bez N+1 přes detail faktury): období podle data vystavení, stornované faktury
+(`canceled`) se nepočítají, dobropis (faktura se záporným `totalPrice`, položky kladné) se odečte od kusů
+i obratu a produkt, který vyjde na nulu, v žebříčku není; služební řádky (bez produktu nebo s kódem
+z `serviceProductCodes`) a interní faktury bez zákazníka se vynechají (`excludeServiceLines=false`,
+`includeInternal=true` je vrátí). Řadí se podle obratu bez DPH, položka nese `revenueWithoutVat`,
+`revenueWithVat` a `invoiceCount`. Odpověď nese `invoices` (počet faktur a dobropisů, součet bez DPH
+a jeho rozpad na zboží a služby) a `duplicates` (stejné číslo dvakrát, dvě faktury k jedné objednávce —
+report je neslučuje, jen upozorní). `merchantId` bere zákazníky jako zbytek API (`merchantScope`);
+`assignment=direct` jen přímo přiřazené přes vazbu M:N — pravidlo plnění kvartálního plánu na Forbaby,
+jehož `actual` odpovídá `invoices.totalWithoutVat` v měně obchodníka. `/v1/invoices` bere `product`
+(„komu jsme fakturovali X") a faktura nese `internal` (bez zákazníka).
 
 Cesty zákazníka podle id (`/v1/customers/{id}`, `/orders`, `/invoices`, `/summary`, `/products`,
 `/prices`) berou `merchantId` jako **ověření vlastnictví**: zákazník, který obchodníkovi nepatří,

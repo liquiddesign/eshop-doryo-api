@@ -47,6 +47,15 @@ final class ReportsEndpoint extends BaseEndpoint
 		. ' INNER JOIN eshop_purchase p2 ON p2.uuid = o2.fk_purchase WHERE o2.canceledTs IS NULL AND p2.fk_customer IS NOT NULL GROUP BY p2.fk_customer)';
 	private const CHURN_ORDER = ['revenue', 'lastOrder'];
 
+	/** Parametry, které má jen report z faktur — u objednávek by tiše nic neudělaly. */
+	private const INVOICE_ONLY_PARAMS = ['assignment', 'excludeServiceLines', 'includeInternal'];
+
+	/** Dobropis má záporný `totalPrice` a kladné položky — znaménko řádku je znaménko faktury. */
+	private const INVOICE_SIGN = '(CASE WHEN i.totalPrice < 0 THEN -1 ELSE 1 END)';
+
+	/** Kolik podezřelých dvojic faktur report nejvýš vypíše. */
+	private const DUPLICATES_MAX = 10;
+
 	/**
 	 * @return array<string, string>
 	 */
@@ -383,6 +392,22 @@ final class ReportsEndpoint extends BaseEndpoint
 	public function topProducts(array $params, Query $query): Response
 	{
 		unset($params);
+
+		$source = $query->string('source', 'orders');
+
+		if ($source === 'invoices') {
+			return $this->topProductsFromInvoices($query);
+		}
+
+		if ($source !== 'orders') {
+			throw ApiException::badRequest("Neznámý zdroj $source; povolené jsou orders (výchozí) a invoices.");
+		}
+
+		foreach (self::INVOICE_ONLY_PARAMS as $param) {
+			if ($query->has($param)) {
+				throw ApiException::badRequest("Parametr $param platí jen pro source=invoices.");
+			}
+		}
 
 		[$from, $to] = $query->window('from', 'to');
 		$suffix = $this->connection->getMutationSuffix();
@@ -1254,6 +1279,243 @@ final class ReportsEndpoint extends BaseEndpoint
 	}
 
 	/**
+	 * Nejprodávanější produkty z FAKTUR (`source=invoices`): co se opravdu vyfakturovalo, jedním dotazem
+	 * nad položkami faktur — bez N+1 přes detail faktury.
+	 *
+	 * Pravidla: období podle data vystavení, stornované faktury (`canceled`) se nepočítají; dobropis
+	 * (faktura se záporným `totalPrice`, položky má kladné) se odečte od kusů i obratu; služební řádky
+	 * (bez produktu nebo s kódem z `serviceProductCodes`) se vynechají; interní faktury bez zákazníka
+	 * taky. `merchantId` bere zákazníky obchodníka jako zbytek API (merchantScope), s `assignment=direct`
+	 * jen přímo přiřazené (vazba M:N) — totéž pravidlo jako plnění kvartálního plánu na Forbaby.
+	 */
+	private function topProductsFromInvoices(Query $query): Response
+	{
+		[$from, $to] = $query->window('from', 'to');
+		$suffix = $this->connection->getMutationSuffix();
+		$filter = $this->itemFilter($query, $suffix);
+		$purchaseFilter = $this->purchaseFilter($query);
+		$assignment = $query->string('assignment', 'scope');
+
+		if (!Arrays::contains(['scope', 'direct'], $assignment)) {
+			throw ApiException::badRequest("Neznámé přiřazení $assignment; povolené jsou scope (výchozí) a direct.");
+		}
+
+		if ($assignment === 'direct' && !isset($purchaseFilter['merchantId'])) {
+			throw ApiException::badRequest('assignment=direct dává smysl jen s merchantId.');
+		}
+
+		$excludeService = (bool) $query->bool('excludeServiceLines', true);
+		$includeInternal = (bool) $query->bool('includeInternal', false);
+		$currency = $this->reportCurrencyCode();
+		$scope = fn (GenericCollection $rows) => $this->invoiceScope($rows, $from, $to, $purchaseFilter, $assignment, $includeInternal);
+		[$service, $serviceValues] = $this->serviceLineCondition();
+		$sign = self::INVOICE_SIGN;
+
+		$rows = $this->connection->rows(['ci' => 'eshop_invoiceitem'], [
+			'productId' => 'ci.fk_product',
+			'code' => 'MAX(ci.productCode)',
+			'name' => 'MAX(ci.name)',
+			'quantity' => "SUM($sign * ci.amount)",
+			'revenue' => "SUM($sign * ci.price * ci.amount)",
+			'revenueVat' => "SUM($sign * ci.priceVat * ci.amount)",
+			'invoices' => 'COUNT(DISTINCT i.uuid)',
+		])
+			->join(['i' => 'eshop_invoice'], 'i.uuid = ci.fk_invoice', [], 'INNER')
+			->where('ci.fk_product IS NOT NULL');
+		$scope($rows);
+
+		if ($excludeService) {
+			$rows->where("NOT ($service)", $serviceValues);
+		}
+
+		if ($filter !== null) {
+			self::applyItemFilter($rows, $filter);
+		}
+
+		// dobropis, který vynuloval prodej, produkt ze žebříčku vyřadí — nula kusů za nula korun nic neříká
+		$rows->setGroupBy(['ci.fk_product'], "SUM($sign * ci.amount) <> 0 OR ROUND(SUM($sign * ci.price * ci.amount), 2) <> 0")
+			->orderBy(['revenue' => 'DESC'])
+			->setTake($query->limit());
+
+		$items = [];
+
+		foreach ($rows as $row) {
+			$items[] = [
+				'productId' => $row->productId,
+				'code' => $row->code,
+				'name' => $row->name,
+				'quantity' => (int) $row->quantity,
+				'revenueWithoutVat' => Money::format($row->revenue, $currency),
+				'revenueWithVat' => Money::format($row->revenueVat, $currency),
+				'invoiceCount' => (int) $row->invoices,
+			];
+		}
+
+		$vynechane = \array_filter([
+			$excludeService ? 'služební řádky (bez produktu nebo s kódem služby)' : null,
+			$includeInternal ? null : 'faktury bez zákazníka (interní doklady)',
+		]);
+		$extra = [
+			'source' => 'invoices',
+			'invoices' => $this->invoiceTotals($scope, $service, $serviceValues, $currency),
+			'note' => 'Z faktur podle data vystavení: stornované se nepočítají, dobropisy se odečítají od kusů i obratu'
+				. ($vynechane ? '; vynechané jsou ' . \implode(' a ', $vynechane) : '')
+				. '. Řazení podle obratu bez DPH. Součet žebříčku se od invoices.totalWithoutVat liší o služební řádky '
+				. 'a řádky bez produktu — rozpad nese invoices.',
+		];
+		$popis = ($filter['popis'] ?? []) + ($purchaseFilter['popis'] ?? []);
+
+		if ($assignment === 'direct') {
+			$popis['assignment'] = 'direct';
+			$extra['assignmentNote'] = 'Jen zákazníci přímo přiřazení obchodníkovi (bez podřízených a skupin) — stejně jako plnění '
+				. 'kvartálního plánu; plán počítá i služební řádky, srovnávej s invoices.totalWithoutVat v měně obchodníka.';
+		}
+
+		if ($popis) {
+			$extra['filter'] = $popis;
+		}
+
+		if ($duplicates = $this->invoiceDuplicates($scope)) {
+			$extra['duplicates'] = $duplicates;
+		}
+
+		$extra += $this->currencyExtra();
+
+		return Response::list($items, null)->withExtra($extra);
+	}
+
+	/**
+	 * Faktury, ze kterých report počítá: období vystavení, bez storna, (bez interních), obchodník, zákazník, měna.
+	 * @param \StORM\GenericCollection<\stdClass> $rows
+	 * @param array{merchantId?: string, customerId?: string, currencyIds?: array<string>}|null $purchaseFilter
+	 */
+	private function invoiceScope(GenericCollection $rows, string $from, string $to, ?array $purchaseFilter, string $assignment, bool $includeInternal): void
+	{
+		$rows->where('i.exposed >= :apiFrom AND i.exposed <= :apiTo', ['apiFrom' => $from, 'apiTo' => $to])
+			->where('i.canceled IS NULL');
+
+		if (!$includeInternal) {
+			$rows->where('i.fk_customer IS NOT NULL');
+		}
+
+		if (isset($purchaseFilter['merchantId'])) {
+			$rows->where($assignment === 'direct'
+				? 'i.fk_customer IN (SELECT dnxn.fk_customer FROM ' . Merchants::NXN_TABLE . ' dnxn WHERE dnxn.fk_merchant = :apiMerchant)'
+				: Merchants::customerCondition($this->codebooks, 'i.fk_customer'), ['apiMerchant' => $purchaseFilter['merchantId']]);
+		}
+
+		if (isset($purchaseFilter['customerId'])) {
+			$rows->where('i.fk_customer = :apiCustomer', ['apiCustomer' => $purchaseFilter['customerId']]);
+		}
+
+		if (!isset($purchaseFilter['currencyIds'])) {
+			return;
+		}
+
+		$rows->where('i.fk_currency', $purchaseFilter['currencyIds']);
+	}
+
+	/**
+	 * Řádek faktury, který není zboží: bez produktu, nebo s kódem z `serviceProductCodes` (kód položky i produktu).
+	 * @return array{0: string, 1: array<string, string>}
+	 */
+	private function serviceLineCondition(): array
+	{
+		$codes = \array_values(\array_unique(\array_filter(\array_map('strval', $this->config->getServiceProductCodes()), static fn (string $c): bool => $c !== '')));
+
+		if (!$codes) {
+			return ['ci.fk_product IS NULL', []];
+		}
+
+		$values = [];
+
+		foreach ($codes as $i => $code) {
+			$values["apiSvc$i"] = $code;
+		}
+
+		$set = '(:' . \implode(', :', \array_keys($values)) . ')';
+
+		return ["ci.fk_product IS NULL OR ci.productCode IN $set OR ci.fk_product IN (SELECT svc.uuid FROM eshop_product svc WHERE svc.code IN $set)", $values];
+	}
+
+	/**
+	 * Kolik faktur report vzal a jejich součet bez DPH rozpadnutý na zboží a služby — aby šel žebříček
+	 * srovnat s fakturací (a s plněním plánu, které sčítá celé faktury).
+	 * @param callable(\StORM\GenericCollection<\stdClass>): void $scope
+	 * @param array<string, string> $serviceValues
+	 * @return array<string, mixed>
+	 */
+	private function invoiceTotals(callable $scope, string $service, array $serviceValues, string $currency): array
+	{
+		$head = $this->connection->rows(['i' => 'eshop_invoice'], [
+			'cnt' => 'COUNT(*)',
+			'credit' => 'SUM(CASE WHEN i.totalPrice < 0 THEN 1 ELSE 0 END)',
+			'total' => 'SUM(i.totalPrice)',
+		]);
+		$scope($head);
+		$sign = self::INVOICE_SIGN;
+		$lines = $this->connection->rows(['ci' => 'eshop_invoiceitem'])
+			->setSelect([
+				'products' => "SUM(CASE WHEN $service THEN 0 ELSE $sign * ci.price * ci.amount END)",
+				'services' => "SUM(CASE WHEN $service THEN $sign * ci.price * ci.amount ELSE 0 END)",
+			], $serviceValues)
+			->join(['i' => 'eshop_invoice'], 'i.uuid = ci.fk_invoice', [], 'INNER');
+		$scope($lines);
+
+		$h = null;
+
+		foreach ($head as $row) {
+			$h = $row;
+		}
+
+		$l = null;
+
+		foreach ($lines as $row) {
+			$l = $row;
+		}
+
+		return [
+			'count' => (int) ($h->cnt ?? 0),
+			'creditNotes' => (int) ($h->credit ?? 0),
+			'totalWithoutVat' => Money::format((float) ($h->total ?? 0), $currency),
+			'productLinesWithoutVat' => Money::format((float) ($l->products ?? 0), $currency),
+			'serviceLinesWithoutVat' => Money::format((float) ($l->services ?? 0), $currency),
+		];
+	}
+
+	/**
+	 * Podezřelé dvojice mezi započtenými fakturami: stejné číslo dvakrát, nebo dvě faktury k jedné objednávce.
+	 * Report je neslučuje (účetně jsou to samostatné doklady), jen na ně upozorní.
+	 * @param callable(\StORM\GenericCollection<\stdClass>): void $scope
+	 * @return array<array<string, mixed>>
+	 */
+	private function invoiceDuplicates(callable $scope): array
+	{
+		$out = [];
+		$sameNumber = $this->connection->rows(['i' => 'eshop_invoice'], ['number' => 'i.code', 'cnt' => 'COUNT(*)']);
+		$scope($sameNumber);
+		$sameNumber->setGroupBy(['i.code'], 'COUNT(*) > 1')->setTake(self::DUPLICATES_MAX);
+
+		foreach ($sameNumber as $row) {
+			$out[] = ['reason' => 'sameNumber', 'numbers' => \array_fill(0, (int) $row->cnt, (string) $row->number)];
+		}
+
+		$sameOrder = $this->connection->rows(['nxn' => 'eshop_invoice_nxn_eshop_order'], [
+			'orderId' => 'nxn.fk_order',
+			'numbers' => "GROUP_CONCAT(DISTINCT i.code ORDER BY i.code SEPARATOR ',')",
+		])
+			->join(['i' => 'eshop_invoice'], 'i.uuid = nxn.fk_invoice', [], 'INNER');
+		$scope($sameOrder);
+		$sameOrder->setGroupBy(['nxn.fk_order'], 'COUNT(DISTINCT nxn.fk_invoice) > 1')->setTake(self::DUPLICATES_MAX);
+
+		foreach ($sameOrder as $row) {
+			$out[] = ['reason' => 'sameOrder', 'orderId' => $row->orderId, 'numbers' => \explode(',', (string) $row->numbers)];
+		}
+
+		return $out;
+	}
+
+	/**
 	 * @param array<string>|null $purchases
 	 * @return array<array<string, mixed>>
 	 */
@@ -1405,7 +1667,7 @@ final class ReportsEndpoint extends BaseEndpoint
 	/**
 	 * Zúžení reportu na položky jedné kategorie (i s podkategoriemi) nebo jednoho výrobce.
 	 * Neznámá kategorie či výrobce je 400 — tichý prázdný report by model četl jako „nic se neprodalo".
-	 * @return array{sql: string, values: array<string, string>, popis: array<string, string>}|null
+	 * @return array{sql: string, derived: string, values: array<string, string>, popis: array<string, string>, small: bool}|null
 	 */
 	private function itemFilter(Query $query, string $suffix): ?array
 	{

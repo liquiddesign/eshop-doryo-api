@@ -81,6 +81,9 @@ final class DoryoApiDI extends CompilerExtension
 				// k zákazníkům obchodníka patří i ti ze skupin, které má přiřazené
 				'customerGroups' => Expect::bool(false),
 			]),
+			// kódy položek faktur, které nejsou zboží (balné, dodatečná sleva) — report nejprodávanějších
+			// produktů z faktur je vynechá; řádek faktury bez produktu je služba vždy
+			'serviceProductCodes' => Expect::listOf('string')->mergeDefaults(false),
 			// ceny konkrétního zákazníka jsou vědomá výjimka — ve výchozím stavu vypnuté
 			'customerPrices' => Expect::bool(false),
 			'userfilesDir' => Expect::string()->nullable(),
@@ -129,6 +132,7 @@ final class DoryoApiDI extends CompilerExtension
 				'merchantOrders' => $config->merchantScope->orders,
 				'merchantSubordinates' => $config->merchantScope->subordinates,
 				'merchantCustomerGroups' => $config->merchantScope->customerGroups,
+				'serviceProductCodes' => $config->serviceProductCodes,
 				'customerPricesEnabled' => $config->customerPrices,
 				'userfilesDir' => $config->userfilesDir ?? $builder->parameters['wwwDir'] . '/userfiles',
 				'imageSizes' => $config->imageSizes,
