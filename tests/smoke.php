@@ -131,6 +131,15 @@ foreach (['customers', 'orders', 'invoices', 'products'] as $domain) {
 		"status $status",
 	);
 	check("$domain vrací nejvýš limit položek", \count($data['items'] ?? []) <= 2);
+
+	if ($domain !== 'customers' && $domain !== 'products') {
+		continue;
+	}
+
+	$total = $data['total'] ?? null;
+	check("$domain na první stránce nese total", \is_int($total) && $total >= \count($data['items'] ?? []) && ($total > 2) === ($data['hasMore'] ?? null), \var_export($total, true));
+	[, $next] = request("$baseUrl/v1/$domain?limit=2&cursor=" . \urlencode((string) ($data['nextCursor'] ?? '')), $token);
+	check("$domain další stránka total nepočítá", !\array_key_exists('total', $next ?? []) || ($data['nextCursor'] ?? null) === null);
 }
 
 // Bez zadaného rozsahu se bere posledních šest měsíců. Instance s postarší kopií dat

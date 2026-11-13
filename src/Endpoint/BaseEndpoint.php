@@ -50,14 +50,18 @@ abstract class BaseEndpoint implements Endpoint
 	/**
 	 * Stránka výsledků. Bere se o jeden záznam víc, než klient chtěl — z toho se pozná,
 	 * jestli má smysl posílat další kurzor, a nemusí se počítat COUNT přes celou tabulku.
+	 * S `$withTotal` se na první stránce spočítá i počet všech záznamů po filtrech (COUNT DISTINCT
+	 * přes PK) — u číselníků jako zákazníci a produkty, kde se klient ptá „kolik jich je" a stránkovat
+	 * celý seznam kvůli jednomu číslu je zbytečné. Další stránky ho nepočítají.
 	 * @template T of \StORM\Entity
 	 * @param \StORM\Collection<T> $collection
-	 * @return array{rows: array<string, T>, nextCursor: string|null}
+	 * @return array{rows: array<string, T>, nextCursor: string|null, total: int|null}
 	 */
-	protected function paginate(Collection $collection, Query $query): array
+	protected function paginate(Collection $collection, Query $query, bool $withTotal = false): array
 	{
 		$limit = $query->limit();
 		$offset = $query->offset();
+		$total = $withTotal && $offset === 0 ? $collection->enum('this.' . $collection->getRepository()->getStructure()->getPK()->getName()) : null;
 
 		$rows = $collection->setTake($limit + 1)->setSkip($offset)->toArray();
 		$hasMore = \count($rows) > $limit;
@@ -65,6 +69,7 @@ abstract class BaseEndpoint implements Endpoint
 		return [
 			'rows' => $hasMore ? \array_slice($rows, 0, $limit, true) : $rows,
 			'nextCursor' => $hasMore ? Cursor::encode($offset + $limit) : null,
+			'total' => $total,
 		];
 	}
 

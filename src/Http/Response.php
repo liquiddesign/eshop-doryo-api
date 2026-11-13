@@ -22,13 +22,13 @@ final class Response
 	/**
 	 * @param array<mixed> $items
 	 */
-	public static function list(array $items, ?string $nextCursor): self
+	public static function list(array $items, ?string $nextCursor, ?int $total = null): self
 	{
 		return new self([
 			'items' => \array_values($items),
 			'nextCursor' => $nextCursor,
 			'hasMore' => $nextCursor !== null,
-		]);
+		] + ($total === null ? [] : ['total' => $total]));
 	}
 
 	public static function problem(ApiException $exception): self

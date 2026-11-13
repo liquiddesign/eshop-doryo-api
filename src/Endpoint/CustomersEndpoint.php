@@ -80,7 +80,7 @@ final class CustomersEndpoint extends BaseEndpoint
 
 		$this->applyFulltext($collection, $query, ['this.fullname', 'this.company', 'this.email', 'this.ic', 'this.phone']);
 
-		$page = $this->paginate($collection->orderBy(['this.createdTs' => 'DESC']), $query);
+		$page = $this->paginate($collection->orderBy(['this.createdTs' => 'DESC']), $query, true);
 		$extras = $this->loadExtras($page['rows']);
 
 		$items = [];
@@ -89,7 +89,7 @@ final class CustomersEndpoint extends BaseEndpoint
 			$items[] = $this->mapper->map($customer, $extras[$id]);
 		}
 
-		return Response::list($items, $page['nextCursor']);
+		return Response::list($items, $page['nextCursor'], $page['total']);
 	}
 
 	/**

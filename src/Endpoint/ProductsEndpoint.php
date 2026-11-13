@@ -95,7 +95,7 @@ final class ProductsEndpoint extends BaseEndpoint
 
 		// `createdTs` je na produktu až od eshopu 2.1; starší shop řadí aspoň stabilně podle PK
 		$order = $hasCreatedTs ? ['this.createdTs' => 'DESC', 'this.uuid' => 'DESC'] : ['this.uuid' => 'DESC'];
-		$page = $this->paginate($collection->orderBy($order), $query);
+		$page = $this->paginate($collection->orderBy($order), $query, true);
 		$extras = $this->loadExtras($page['rows']);
 
 		$items = [];
@@ -104,7 +104,7 @@ final class ProductsEndpoint extends BaseEndpoint
 			$items[] = $this->mapper->map($product, $extras[$id]);
 		}
 
-		return Response::list($items, $page['nextCursor']);
+		return Response::list($items, $page['nextCursor'], $page['total']);
 	}
 
 	/**
