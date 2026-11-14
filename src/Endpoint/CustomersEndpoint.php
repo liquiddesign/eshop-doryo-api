@@ -6,6 +6,7 @@ namespace DoryoApi\Endpoint;
 
 use DoryoApi\Codebooks;
 use DoryoApi\Config;
+use DoryoApi\Http\ApiException;
 use DoryoApi\Http\Query;
 use DoryoApi\Http\Response;
 use DoryoApi\Mapper\CustomerMapper;
@@ -15,6 +16,7 @@ use DoryoApi\Support\Money;
 use DoryoApi\Support\OrderTotals;
 use Eshop\DB\Address;
 use Eshop\DB\Customer;
+use Nette\Utils\Arrays;
 use StORM\Collection;
 use StORM\DIConnection;
 
@@ -76,6 +78,20 @@ final class CustomersEndpoint extends BaseEndpoint
 
 		if ($since = $query->dateTime('since')) {
 			$collection->where('this.createdTs >= :apiSince', ['apiSince' => $since]);
+		}
+
+		// Odběrná místa (pobočky pod fakturační organizací): výchozí seznam je nese jako každého
+		// zákazníka, admin v seznamu Zákazníci ukazuje jen organizace — branches=false dá totéž číslo.
+		$branches = $query->string('branches');
+
+		if ($branches !== null && !Arrays::contains(['true', 'false', 'only'], $branches)) {
+			throw ApiException::badRequest('Neznámá hodnota branches; povolené jsou true (výchozí, i s pobočkami), false (jen fakturační organizace) a only (jen pobočky).');
+		}
+
+		if ($branches === 'false') {
+			$collection->where('this.fk_parentCustomer IS NULL');
+		} elseif ($branches === 'only') {
+			$collection->where('this.fk_parentCustomer IS NOT NULL');
 		}
 
 		$this->applyFulltext($collection, $query, ['this.fullname', 'this.company', 'this.email', 'this.ic', 'this.phone']);
