@@ -95,13 +95,33 @@ final class Merchants
 	}
 
 	/**
-	 * Patří zákazník obchodníkovi? Jeden dotaz nad eshop_customer; obchodník i zákazník jsou navázané parametry.
+	 * Zákazník, kterého obchodník vidí v seznamu zákazníků: svoje (`customerCondition`) a k nim fakturační
+	 * organizace poboček, které má přiřazené — i když organizace sama patří jinému obchodníkovi (tak to dělá
+	 * admin Forbaby, `getMerchantVisibleCustomerIds`). Objednávky a faktury takové organizace zůstávají cizí.
+	 */
+	public static function customerListCondition(Codebooks $codebooks, string $customerExpr, string $param = 'apiMerchant'): string
+	{
+		$own = self::customerCondition($codebooks, $customerExpr, $param);
+
+		if (!$codebooks->hasColumn(self::CUSTOMER_TABLE, 'fk_parentCustomer')) {
+			return $own;
+		}
+
+		$parentOfBranch = "$customerExpr IN (SELECT pb.fk_parentCustomer FROM " . self::CUSTOMER_TABLE
+			. ' pb WHERE pb.fk_parentCustomer IS NOT NULL AND ' . self::customerCondition($codebooks, 'pb.uuid', $param) . ')';
+
+		return "($own OR $parentOfBranch)";
+	}
+
+	/**
+	 * Patří zákazník obchodníkovi (nebo je to organizace jeho pobočky — co vidí v seznamu, smí i otevřít)?
+	 * Jeden dotaz nad eshop_customer; obchodník i zákazník jsou navázané parametry.
 	 */
 	public static function ownsCustomer(DIConnection $connection, Codebooks $codebooks, string $customerId, string $merchantId): bool
 	{
 		$row = $connection->rows(['oc' => 'eshop_customer'], ['id' => 'oc.uuid'])
 			->where('oc.uuid = :apiOwnedCustomer', ['apiOwnedCustomer' => $customerId])
-			->where(self::customerCondition($codebooks, 'oc.uuid'), ['apiMerchant' => $merchantId])
+			->where(self::customerListCondition($codebooks, 'oc.uuid'), ['apiMerchant' => $merchantId])
 			->first();
 
 		return $row !== null;

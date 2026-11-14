@@ -18,7 +18,7 @@ final class Config
 	 * Verze balíku, když se nedá zjistit z Composeru (balík nasazený mimo composer install).
 	 * Skutečná verze se bere z tagu přes {@see version()}, aby s vydáním nedriftovala.
 	 */
-	public const VERSION = '1.15.1';
+	public const VERSION = '1.15.2';
 
 	/** Normalizované stavy objednávek, které API vrací v poli `status`. */
 	public const ORDER_STATUSES = ['new', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
@@ -49,6 +49,7 @@ final class Config
 	 *   nebo `customersAndPlaced` (jeho zákazníků a k tomu ty, které zadal za cizí)
 	 * @param bool $merchantSubordinates Obchodník vidí i zákazníky svých přímých podřízených
 	 * @param bool $merchantCustomerGroups K zákazníkům obchodníka patří i ti z jeho skupin zákazníků
+	 * @param string|null $inactiveRibbon Interní štítek neaktivního zákazníka — seznam zákazníků ho vynechá jako admin
 	 * @param array<string> $serviceProductCodes Kódy položek faktur, které nejsou zboží (balné, dodatečná sleva…) —
 	 *     report nejprodávanějších produktů z faktur je vynechá; řádek bez produktu je služba vždy
 	 */
@@ -84,7 +85,17 @@ final class Config
 		private bool $merchantSubordinates = false,
 		private bool $merchantCustomerGroups = false,
 		private array $serviceProductCodes = [],
+		private ?string $inactiveRibbon = null,
 	) {
+	}
+
+	/**
+	 * Interní štítek (`eshop_internalribbon.uuid`), kterým shop značí neaktivní zákazníky; seznam zákazníků je
+	 * bez nich jako admin (`includeInactive=true` je vrátí). Null = shop takový štítek nevede.
+	 */
+	public function getInactiveRibbon(): ?string
+	{
+		return $this->inactiveRibbon;
 	}
 
 	/**

@@ -94,6 +94,16 @@ final class CustomersEndpoint extends BaseEndpoint
 			$collection->where('this.fk_parentCustomer IS NOT NULL');
 		}
 
+		// Neaktivní zákazníci (interní štítek z configu) jsou v seznamu jen na vyžádání — jako admin.
+		$ribbon = $this->config->getInactiveRibbon();
+
+		if ($ribbon !== null && !$query->bool('includeInactive') && $this->codebooks->hasColumn('eshop_customer_nxn_eshop_internalribbon', 'fk_internalRibbon')) {
+			$collection->where(
+				'NOT EXISTS (SELECT 1 FROM eshop_customer_nxn_eshop_internalribbon apiRibbon WHERE apiRibbon.fk_customer = this.uuid AND apiRibbon.fk_internalRibbon = :apiInactiveRibbon)',
+				['apiInactiveRibbon' => $ribbon],
+			);
+		}
+
 		$this->applyFulltext($collection, $query, ['this.fullname', 'this.company', 'this.email', 'this.ic', 'this.phone']);
 
 		$page = $this->paginate($collection->orderBy(['this.createdTs' => 'DESC']), $query, true);
@@ -308,7 +318,7 @@ final class CustomersEndpoint extends BaseEndpoint
 	 */
 	private function whereMerchant(Collection $collection, string $merchantId): void
 	{
-		$collection->where(Merchants::customerCondition($this->codebooks, 'this.uuid'), ['apiMerchant' => $merchantId]);
+		$collection->where(Merchants::customerListCondition($this->codebooks, 'this.uuid'), ['apiMerchant' => $merchantId]);
 	}
 
 	/**

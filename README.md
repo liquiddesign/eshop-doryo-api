@@ -76,6 +76,7 @@ Dvě věci, na které se naráží na klasickém serveru:
 | `merchantScope.orders` | `placed` | objednávky obchodníka: `placed` = které zadal, `customers` = jeho zákazníků (přesně jako seznam objednávek OZ v adminu; od 1.15.1), `customersAndPlaced` = jeho zákazníků a k tomu ty, které zadal za cizí |
 | `merchantScope.subordinates` | `false` | obchodník vidí i zákazníky přímých podřízených (`eshop_merchant_nxn_subordinate`) |
 | `merchantScope.customerGroups` | `false` | k zákazníkům obchodníka patří i ti z jeho skupin zákazníků |
+| `inactiveRibbon` | `null` | uuid interního štítku neaktivního zákazníka — seznam zákazníků ho bez `includeInactive=true` vynechá jako admin |
 | `serviceProductCodes` | `[]` | kódy položek faktur, které nejsou zboží (balné, dodatečná sleva) — `top-products?source=invoices` je vynechá; řádek bez produktu je služba vždy |
 | `customerPrices` | `false` | vydávat ceny konkrétního zákazníka (vědomá výjimka, viz níž) |
 | `defaultLimit` | `200` | kolik záznamů vrátí seznam nebo report bez `limit` |
@@ -122,7 +123,9 @@ všech po filtrech), částky jako
 
 Seznam zákazníků (`/v1/customers`) nese i odběrná místa — pobočky pod fakturační organizací (1.15.0):
 `branches=false` dá jen organizace, tedy tolik zákazníků, kolik vidí člověk v seznamu Zákazníci
-v administraci, `only` jen pobočky; `total` na první stránce počítá po filtrech.
+v administraci, `only` jen pobočky; `total` na první stránce počítá po filtrech. S `merchantId` jsou v seznamu
+i fakturační organizace poboček obchodníka (jako v adminu; jejich objednávky a faktury zůstávají cizí) a bez
+`includeInactive=true` chybí zákazníci s interním štítkem z configu `inactiveRibbon` (1.15.2).
 
 ## Aby odpověď nešla přečíst špatně
 
