@@ -18,7 +18,7 @@ final class Config
 	 * Verze balíku, když se nedá zjistit z Composeru (balík nasazený mimo composer install).
 	 * Skutečná verze se bere z tagu přes {@see version()}, aby s vydáním nedriftovala.
 	 */
-	public const VERSION = '1.15.0';
+	public const VERSION = '1.15.1';
 
 	/** Normalizované stavy objednávek, které API vrací v poli `status`. */
 	public const ORDER_STATUSES = ['new', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
@@ -45,7 +45,8 @@ final class Config
 	 * @param int $defaultWindowMonths Výchozí okno seznamů a reportů bez data; velký shop si ho zkrátí
 	 * @param int $maxWindowMonths Nejdelší okno, které API přijme
 	 * @param string $vatCountry Země, jejíž sazbu DPH produktu API bere (eshop 2.2 je vede po zemích)
-	 * @param string $merchantOrders Objednávky obchodníka: `placed` (které zadal) nebo `customers` (jeho zákazníků)
+	 * @param string $merchantOrders Objednávky obchodníka: `placed` (které zadal), `customers` (jeho zákazníků, jako admin)
+	 *   nebo `customersAndPlaced` (jeho zákazníků a k tomu ty, které zadal za cizí)
 	 * @param bool $merchantSubordinates Obchodník vidí i zákazníky svých přímých podřízených
 	 * @param bool $merchantCustomerGroups K zákazníkům obchodníka patří i ti z jeho skupin zákazníků
 	 * @param array<string> $serviceProductCodes Kódy položek faktur, které nejsou zboží (balné, dodatečná sleva…) —
@@ -91,7 +92,13 @@ final class Config
 	 */
 	public function merchantOrdersByCustomers(): bool
 	{
-		return $this->merchantOrders === 'customers';
+		return $this->merchantOrders === 'customers' || $this->merchantOrders === 'customersAndPlaced';
+	}
+
+	/** K objednávkám zákazníků obchodníka přidat i ty, které zadal za zákazníky jiných obchodníků. */
+	public function merchantOrdersIncludePlaced(): bool
+	{
+		return $this->merchantOrders === 'customersAndPlaced';
 	}
 
 	public function merchantIncludesSubordinates(): bool

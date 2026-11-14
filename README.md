@@ -73,7 +73,7 @@ Dvě věci, na které se naráží na klasickém serveru:
 | `orderStates` | viz níž | mapa normalizovaný stav → stavy shopu |
 | `invoicePaymentTracked` | `true` | eviduje shop úhrady faktur? kde je vede ERP, dej `false` |
 | `vatCountry` | `CZ` | země, jejíž sazbu DPH produktu API bere (eshop 2.2 je vede po zemích; starší volbu ignorují) |
-| `merchantScope.orders` | `placed` | objednávky obchodníka: `placed` = které zadal, `customers` = jeho zákazníků (a které zadal) |
+| `merchantScope.orders` | `placed` | objednávky obchodníka: `placed` = které zadal, `customers` = jeho zákazníků (přesně jako seznam objednávek OZ v adminu; od 1.15.1), `customersAndPlaced` = jeho zákazníků a k tomu ty, které zadal za cizí |
 | `merchantScope.subordinates` | `false` | obchodník vidí i zákazníky přímých podřízených (`eshop_merchant_nxn_subordinate`) |
 | `merchantScope.customerGroups` | `false` | k zákazníkům obchodníka patří i ti z jeho skupin zákazníků |
 | `serviceProductCodes` | `[]` | kódy položek faktur, které nejsou zboží (balné, dodatečná sleva) — `top-products?source=invoices` je vynechá; řádek bez produktu je služba vždy |
