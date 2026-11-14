@@ -85,6 +85,8 @@ final class DoryoApiDI extends CompilerExtension
 			// kódy položek faktur, které nejsou zboží (balné, dodatečná sleva) — report nejprodávanějších
 			// produktů z faktur je vynechá; řádek faktury bez produktu je služba vždy
 			'serviceProductCodes' => Expect::listOf('string')->mergeDefaults(false),
+			// interní štítek neaktivního zákazníka (eshop_internalribbon.uuid): seznam zákazníků je bez něj jako admin
+			'inactiveRibbon' => Expect::string()->nullable(),
 			// ceny konkrétního zákazníka jsou vědomá výjimka — ve výchozím stavu vypnuté
 			'customerPrices' => Expect::bool(false),
 			'userfilesDir' => Expect::string()->nullable(),
@@ -134,6 +136,7 @@ final class DoryoApiDI extends CompilerExtension
 				'merchantSubordinates' => $config->merchantScope->subordinates,
 				'merchantCustomerGroups' => $config->merchantScope->customerGroups,
 				'serviceProductCodes' => $config->serviceProductCodes,
+				'inactiveRibbon' => $config->inactiveRibbon,
 				'customerPricesEnabled' => $config->customerPrices,
 				'userfilesDir' => $config->userfilesDir ?? $builder->parameters['wwwDir'] . '/userfiles',
 				'imageSizes' => $config->imageSizes,

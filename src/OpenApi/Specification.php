@@ -100,9 +100,11 @@ final class Specification
 					$this->param('registrationNo', 'IČO zákazníka (přesná shoda).'),
 					$this->param('email', 'E-mail zákazníka (přesná shoda).'),
 					$this->param('since', 'Jen zákazníci registrovaní od tohoto data (YYYY-MM-DD).'),
-					$this->param('merchantId', 'Jen zákazníci přiřazení tomuto obchodníkovi.'),
+					$this->param('merchantId', 'Jen zákazníci obchodníka jako v jeho seznamu zákazníků v administraci: přiřazení jemu '
+						. '(a podřízeným) a k nim fakturační organizace jeho poboček.'),
 					$this->param('branches', 'Odběrná místa: true (výchozí, organizace i pobočky), false (jen fakturační organizace — '
 						. 'tolik zákazníků vidí člověk v administraci), only (jen pobočky).'),
+					$this->param('includeInactive', 'true = i zákazníci se štítkem neaktivní, které administrace v seznamu skrývá.', 'boolean'),
 					$this->ref('Limit'),
 					$this->ref('Cursor'),
 				],
