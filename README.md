@@ -120,6 +120,10 @@ všech po filtrech), částky jako
   expedice, hodnocení, importy, zdraví katalogu, doklady bez protějšku
 - **orientace** — `meta/capabilities`, `meta/codebooks`, `categories`, `suppliers`, `search`
 
+Seznam zákazníků (`/v1/customers`) nese i odběrná místa — pobočky pod fakturační organizací (1.15.0):
+`branches=false` dá jen organizace, tedy tolik zákazníků, kolik vidí člověk v seznamu Zákazníci
+v administraci, `only` jen pobočky; `total` na první stránce počítá po filtrech.
+
 ## Aby odpověď nešla přečíst špatně
 
 Odpověď čte model, ne člověk, takže tři věci nejdou nechat na domýšlení:

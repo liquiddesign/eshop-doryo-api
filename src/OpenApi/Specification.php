@@ -93,13 +93,16 @@ final class Specification
 			'/v1/customers' => $this->operation(
 				'Seznam zákazníků',
 				'Zákazníci e-shopu i s obratem a počtem objednávek. Hledá se podle jména, firmy, e-mailu a IČO. '
-					. 'První stránka nese total — počet všech zákazníků po filtrech.',
+					. 'První stránka nese total — počet všech zákazníků po filtrech. Seznam nese i odběrná místa (pobočky pod '
+					. 'fakturační organizací); počet jako v seznamu Zákazníci v administraci dá branches=false.',
 				[
 					$this->ref('Q'),
 					$this->param('registrationNo', 'IČO zákazníka (přesná shoda).'),
 					$this->param('email', 'E-mail zákazníka (přesná shoda).'),
 					$this->param('since', 'Jen zákazníci registrovaní od tohoto data (YYYY-MM-DD).'),
 					$this->param('merchantId', 'Jen zákazníci přiřazení tomuto obchodníkovi.'),
+					$this->param('branches', 'Odběrná místa: true (výchozí, organizace i pobočky), false (jen fakturační organizace — '
+						. 'tolik zákazníků vidí člověk v administraci), only (jen pobočky).'),
 					$this->ref('Limit'),
 					$this->ref('Cursor'),
 				],
