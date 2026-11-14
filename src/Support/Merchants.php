@@ -76,18 +76,22 @@ final class Merchants
 	}
 
 	/**
-	 * Podmínka „objednávka (alias jejího nákupu) patří obchodníkovi". Bez `merchantScope.orders: customers`
-	 * jsou to objednávky, které zadal; s ním objednávky jeho zákazníků a k tomu ty, které zadal.
+	 * Podmínka „objednávka (alias jejího nákupu) patří obchodníkovi". `merchantScope.orders`: `placed` = které zadal;
+	 * `customers` = objednávky jeho zákazníků (jako seznam objednávek OZ v adminu — objednávka, kterou zadal za
+	 * zákazníka jiného obchodníka, tam není); `customersAndPlaced` = obojí.
 	 */
 	public static function orderCondition(Codebooks $codebooks, string $purchaseAlias, string $param = 'apiMerchant'): string
 	{
+		$config = $codebooks->getConfig();
 		$placed = "$purchaseAlias.fk_merchant IN " . self::merchantSet($codebooks, $param);
 
-		if (!$codebooks->getConfig()->merchantOrdersByCustomers()) {
+		if (!$config->merchantOrdersByCustomers()) {
 			return $placed;
 		}
 
-		return '(' . self::customerCondition($codebooks, "$purchaseAlias.fk_customer", $param) . " OR $placed)";
+		$customers = self::customerCondition($codebooks, "$purchaseAlias.fk_customer", $param);
+
+		return $config->merchantOrdersIncludePlaced() ? "($customers OR $placed)" : $customers;
 	}
 
 	/**

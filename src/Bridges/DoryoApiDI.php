@@ -74,8 +74,9 @@ final class DoryoApiDI extends CompilerExtension
 			// Komu patří záznam při `?merchantId=`. Výchozí hodnoty drží chování do 1.11.
 			'merchantScope' => Expect::structure([
 				// placed = objednávky, které obchodník zadal (purchase.fk_merchant);
-				// customers = objednávky jeho zákazníků (a k tomu ty, které zadal) — jako admin Forbaby
-				'orders' => Expect::anyOf('placed', 'customers')->default('placed'),
+				// customers = objednávky jeho zákazníků — přesně jako seznam objednávek OZ v adminu Forbaby;
+				// customersAndPlaced = jeho zákazníků a k tomu ty, které zadal za cizí (chování 1.12–1.15.0)
+				'orders' => Expect::anyOf('placed', 'customers', 'customersAndPlaced')->default('placed'),
 				// obchodník vidí i zákazníky přímých podřízených (eshop_merchant_nxn_subordinate)
 				'subordinates' => Expect::bool(false),
 				// k zákazníkům obchodníka patří i ti ze skupin, které má přiřazené
