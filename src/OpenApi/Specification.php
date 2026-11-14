@@ -131,12 +131,16 @@ final class Specification
 			),
 			'/v1/orders' => $this->operation(
 				'Seznam objednávek',
-				'Objednávky e-shopu, nejnovější první. Bez uvedení rozsahu se vrací posledních šest měsíců. '
-					. 'Položky objednávky jsou až v detailu.',
+				'Objednávky e-shopu, nejnovější první. ' . $this->windowNote('createdFrom', 'createdTo')
+					. ' Položky objednávky jsou až v detailu.',
 				[
 					$this->param('createdFrom', 'Objednávky vytvořené od data (YYYY-MM-DD).'),
 					$this->param('createdTo', 'Objednávky vytvořené do data (YYYY-MM-DD).'),
-					$this->param('status', 'Stav objednávky: new, processing, shipped, delivered, cancelled, returned.'),
+					$this->param('status', \sprintf(
+						'Stav objednávky. Tenhle shop rozlišuje: %s (jiné hodnoty z %s nezná a odmítne je).',
+						\implode(', ', \array_keys($this->config->getOrderStates())),
+						\implode(', ', Config::ORDER_STATUSES),
+					)),
 					$this->param('customerId', 'Jen objednávky tohoto zákazníka.'),
 					$this->param('registrationNo', 'Jen objednávky s tímto IČO.'),
 					$this->param('merchantId', 'Jen objednávky obchodníka — podle nastavení shopu ty, které zadal, nebo objednávky jeho zákazníků (a ty, které zadal).'),
@@ -160,7 +164,7 @@ final class Specification
 			),
 			'/v1/invoices' => $this->operation(
 				'Seznam faktur',
-				'Faktury vydané e-shopem. Bez uvedení rozsahu se vrací posledních šest měsíců.',
+				'Faktury vydané e-shopem. ' . $this->windowNote('issuedFrom', 'issuedTo'),
 				[
 					$this->param('issuedFrom', 'Faktury vystavené od data (YYYY-MM-DD).'),
 					$this->param('issuedTo', 'Faktury vystavené do data (YYYY-MM-DD).'),
@@ -548,6 +552,18 @@ final class Specification
 	/**
 	 * @return array<string, mixed>
 	 */
+	/** Věta o časovém okně seznamu: výchozí a nejdelší rozsah z konfigurace shopu. */
+	private function windowNote(string $fromParam, string $toParam): string
+	{
+		return \sprintf(
+			'Bez %s a %s se vrací posledních %d měsíců; rozsah smí být nejvýš %d měsíců v jednom dotazu (delší období projdi po částech).',
+			$fromParam,
+			$toParam,
+			$this->config->getDefaultWindowMonths(),
+			$this->config->getMaxWindowMonths(),
+		);
+	}
+
 	/**
 	 * Období reportu. Bez obou hranic se bere výchozí okno a to musí model vědět: na shopu se
 	 * statisíci objednávek je půlroční agregace to nejdražší, co může chtít, a bez nápovědy
@@ -561,8 +577,10 @@ final class Specification
 		return [
 			$this->param('from', \sprintf(
 				'Začátek období (YYYY-MM-DD). Bez from a to se bere posledních %d měsíců — na velkém shopu je to '
-					. 'nejdražší dotaz, jaký jde položit; zadej období, na které se opravdu ptáš (týdny, ne půl roku).',
+					. 'nejdražší dotaz, jaký jde položit; zadej období, na které se opravdu ptáš (týdny, ne půl roku). '
+					. 'Nejvýš %d měsíců v jednom dotazu; delší období projdi po částech.',
 				$months,
+				$this->config->getMaxWindowMonths(),
 			)),
 			$this->param('to', 'Konec období (YYYY-MM-DD).'),
 		];
